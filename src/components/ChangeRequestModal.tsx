@@ -24,14 +24,6 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
   const [changeReason, setChangeReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Helper function to extract time in HH:MM format from ISO string
-  const getTimeFromISO = (isoString: string): string => {
-    const date = new Date(isoString);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
