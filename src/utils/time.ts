@@ -3,13 +3,16 @@ export const formatTime = (dateString: string): string => {
   return date.toLocaleTimeString('de-DE', { 
     hour: '2-digit', 
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
+    timeZone: 'Europe/Berlin'
   });
 };
 
 export const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('de-DE');
+  return date.toLocaleDateString('de-DE', {
+    timeZone: 'Europe/Berlin'
+  });
 };
 
 export const calculateDuration = (start: string, end?: string): string => {

@@ -24,6 +24,14 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
   const [changeReason, setChangeReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Helper function to extract time in HH:MM format from ISO string
+  const getTimeFromISO = (isoString: string): string => {
+    const date = new Date(isoString);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +56,8 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
         currentStartTime: requestType === 'time_entry' ? entry.startTime : selectedBreak?.startTime,
         currentEndTime: requestType === 'time_entry' ? entry.endTime : selectedBreak?.endTime,
         currentReason: selectedBreak?.reason,
-        newStartTime: newStartTime ? `${entry.date}T${newStartTime}:00` : undefined,
-        newEndTime: newEndTime ? `${entry.date}T${newEndTime}:00` : undefined,
+        newStartTime: newStartTime ? new Date(`${entry.date}T${newStartTime}:00`).toISOString() : undefined,
+        newEndTime: newEndTime ? new Date(`${entry.date}T${newEndTime}:00`).toISOString() : undefined,
         newReason: requestType === 'break' ? newReason || undefined : undefined
       };
 
@@ -133,8 +141,9 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
               value={newStartTime}
               onChange={(e) => setNewStartTime(e.target.value)}
               className="form-input"
-              placeholder="Leer lassen für keine Änderung"
+              step="60"
             />
+            <small>Leer lassen für keine Änderung</small>
           </div>
 
           <div className="form-group">
@@ -144,8 +153,9 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
               value={newEndTime}
               onChange={(e) => setNewEndTime(e.target.value)}
               className="form-input"
-              placeholder="Leer lassen für keine Änderung"
+              step="60"
             />
+            <small>Leer lassen für keine Änderung</small>
           </div>
 
           {requestType === 'break' && (

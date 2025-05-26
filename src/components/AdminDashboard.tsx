@@ -289,8 +289,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                               
                               if (newStart || newEnd) {
                                 const finalValues: any = {};
-                                if (newStart) finalValues.startTime = `${entry?.date}T${newStart}:00`;
-                                if (newEnd) finalValues.endTime = `${entry?.date}T${newEnd}:00`;
+                                // Konvertiere lokale Zeit zu ISO String
+                                if (newStart) {
+                                  const localDateTime = new Date(`${entry?.date}T${newStart}:00`);
+                                  finalValues.startTime = localDateTime.toISOString();
+                                }
+                                if (newEnd) {
+                                  const localDateTime = new Date(`${entry?.date}T${newEnd}:00`);
+                                  finalValues.endTime = localDateTime.toISOString();
+                                }
                                 
                                 handleProcessRequest(request, 'modified', comment || undefined, finalValues);
                               }
