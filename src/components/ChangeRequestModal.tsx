@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { TimeEntry, Break, ChangeRequest } from '../types';
+import { TimeEntry, ChangeRequest } from '../types';
 import { createChangeRequest } from '../utils/storageProvider';
-import { formatTime, formatDate } from '../utils/time';
+import { formatTime } from '../utils/time';
 
 interface ChangeRequestModalProps {
   userId: string;

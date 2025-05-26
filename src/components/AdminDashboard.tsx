@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, TimeEntry, ChangeRequest } from '../types';
-import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest, directUpdateTimeEntry, directUpdateBreak } from '../utils/storageProvider';
+import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest } from '../utils/storageProvider';
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 
 interface AdminDashboardProps {
@@ -15,8 +15,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'requests'>('overview');
-  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
-  const [editingBreak, setEditingBreak] = useState<{ entry: TimeEntry, breakIndex: number } | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -65,27 +63,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
-  const handleDirectEdit = async (type: 'entry' | 'break', data: any) => {
-    try {
-      if (type === 'entry' && editingEntry) {
-        await directUpdateTimeEntry(editingEntry.id, data);
-      } else if (type === 'break' && editingBreak) {
-        const break_ = editingBreak.entry.breaks[editingBreak.breakIndex];
-        if (break_.id) {
-          await directUpdateBreak(break_.id, data);
-        }
-      }
-      // Daten neu laden
-      const entriesData = await getTimeEntries();
-      setEntries(entriesData);
-      setEditingEntry(null);
-      setEditingBreak(null);
-      alert('Änderungen wurden gespeichert.');
-    } catch (error) {
-      console.error('Error updating:', error);
-      alert('Fehler beim Speichern der Änderungen.');
-    }
-  };
+  // Funktion für zukünftige direkte Bearbeitung
+  // const handleDirectEdit = async (type: 'entry' | 'break', data: any) => {
+  //   try {
+  //     if (type === 'entry' && editingEntry) {
+  //       await directUpdateTimeEntry(editingEntry.id, data);
+  //     } else if (type === 'break' && editingBreak) {
+  //       const break_ = editingBreak.entry.breaks[editingBreak.breakIndex];
+  //       if (break_.id) {
+  //         await directUpdateBreak(break_.id, data);
+  //       }
+  //     }
+  //     // Daten neu laden
+  //     const entriesData = await getTimeEntries();
+  //     setEntries(entriesData);
+  //     setEditingEntry(null);
+  //     setEditingBreak(null);
+  //     alert('Änderungen wurden gespeichert.');
+  //   } catch (error) {
+  //     console.error('Error updating:', error);
+  //     alert('Fehler beim Speichern der Änderungen.');
+  //   }
+  // };
 
   return (
     <div className="admin-dashboard">
