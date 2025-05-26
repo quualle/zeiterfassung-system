@@ -1,4 +1,4 @@
-import { User, TimeEntry, Break } from '../types';
+import { User, TimeEntry } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Benutzer-Funktionen
