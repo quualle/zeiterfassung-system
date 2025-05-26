@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, TimeEntry } from '../types';
-import { getUsers, getTimeEntries } from '../utils/storageProvider';
+import { User, TimeEntry, ChangeRequest } from '../types';
+import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest, directUpdateTimeEntry, directUpdateBreak } from '../utils/storageProvider';
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 
 interface AdminDashboardProps {
@@ -13,15 +13,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests'>('overview');
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
+  const [editingBreak, setEditingBreak] = useState<{ entry: TimeEntry, breakIndex: number } | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const [usersData, entriesData] = await Promise.all([
+      const [usersData, entriesData, requestsData] = await Promise.all([
         getUsers(),
-        getTimeEntries()
+        getTimeEntries(),
+        getChangeRequests()
       ]);
       setUsers(usersData);
       setEntries(entriesData);
+      setChangeRequests(requestsData);
     };
     loadData();
   }, []);
@@ -37,6 +43,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     return user ? user.name : 'Unbekannt';
   };
 
+  const handleProcessRequest = async (
+    request: ChangeRequest,
+    status: 'approved' | 'rejected' | 'modified',
+    adminComment?: string,
+    finalValues?: { startTime?: string; endTime?: string; reason?: string }
+  ) => {
+    try {
+      await processChangeRequest(request.id, status, user.id, adminComment, finalValues);
+      // Daten neu laden
+      const [entriesData, requestsData] = await Promise.all([
+        getTimeEntries(),
+        getChangeRequests()
+      ]);
+      setEntries(entriesData);
+      setChangeRequests(requestsData);
+      alert(`Änderungsantrag wurde ${status === 'approved' ? 'genehmigt' : status === 'rejected' ? 'abgelehnt' : 'modifiziert'}.`);
+    } catch (error) {
+      console.error('Error processing request:', error);
+      alert('Fehler beim Verarbeiten des Antrags.');
+    }
+  };
+
+  const handleDirectEdit = async (type: 'entry' | 'break', data: any) => {
+    try {
+      if (type === 'entry' && editingEntry) {
+        await directUpdateTimeEntry(editingEntry.id, data);
+      } else if (type === 'break' && editingBreak) {
+        const break_ = editingBreak.entry.breaks[editingBreak.breakIndex];
+        if (break_.id) {
+          await directUpdateBreak(break_.id, data);
+        }
+      }
+      // Daten neu laden
+      const entriesData = await getTimeEntries();
+      setEntries(entriesData);
+      setEditingEntry(null);
+      setEditingBreak(null);
+      alert('Änderungen wurden gespeichert.');
+    } catch (error) {
+      console.error('Error updating:', error);
+      alert('Fehler beim Speichern der Änderungen.');
+    }
+  };
+
   return (
     <div className="admin-dashboard">
       <header className="header">
@@ -48,7 +98,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       </header>
 
       <main className="main-content">
-        <div className="filters">
+        {/* Tab Navigation */}
+        <div className="tab-navigation">
+          <button 
+            className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            Übersicht
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'requests' ? 'active' : ''}`}
+            onClick={() => setActiveTab('requests')}
+          >
+            Änderungsanträge ({changeRequests.filter(r => r.status === 'pending').length})
+          </button>
+        </div>
+
+        {activeTab === 'overview' ? (
+          <>
+            <div className="filters">
           <div className="filter-group">
             <label htmlFor="user-filter">Mitarbeiter:</label>
             <select 
@@ -153,6 +221,118 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             })}
           </div>
         </div>
+          </>
+        ) : (
+          /* Änderungsanträge Tab */
+          <div className="change-requests-section">
+            <h3>Offene Änderungsanträge</h3>
+            {changeRequests.filter(r => r.status === 'pending').length === 0 ? (
+              <p>Keine offenen Änderungsanträge vorhanden.</p>
+            ) : (
+              <div className="requests-list">
+                {changeRequests
+                  .filter(r => r.status === 'pending')
+                  .map(request => {
+                    const requestUser = users.find(u => u.id === request.userId);
+                    const entry = entries.find(e => e.id === request.timeEntryId);
+                    
+                    return (
+                      <div key={request.id} className="request-card">
+                        <div className="request-header">
+                          <h4>{requestUser?.name} - {formatDate(request.createdAt)}</h4>
+                          <span className="request-type">
+                            {request.requestType === 'time_entry' ? 'Arbeitszeit' : 'Pause'}
+                          </span>
+                        </div>
+                        
+                        <div className="request-details">
+                          <div className="current-values">
+                            <h5>Aktuelle Werte:</h5>
+                            {request.currentStartTime && <p>Start: {formatTime(request.currentStartTime)}</p>}
+                            {request.currentEndTime && <p>Ende: {formatTime(request.currentEndTime)}</p>}
+                            {request.currentReason && <p>Grund: {request.currentReason}</p>}
+                          </div>
+                          
+                          <div className="new-values">
+                            <h5>Gewünschte Änderungen:</h5>
+                            {request.newStartTime && <p>Start: {formatTime(request.newStartTime)}</p>}
+                            {request.newEndTime && <p>Ende: {formatTime(request.newEndTime)}</p>}
+                            {request.newReason && <p>Grund: {request.newReason}</p>}
+                          </div>
+                        </div>
+                        
+                        <p className="change-reason"><strong>Begründung:</strong> {request.changeReason}</p>
+                        
+                        <div className="request-actions">
+                          <button 
+                            onClick={() => handleProcessRequest(request, 'approved')}
+                            className="btn btn-success"
+                          >
+                            Genehmigen
+                          </button>
+                          <button 
+                            onClick={() => {
+                              const comment = prompt('Ablehnungsgrund:');
+                              if (comment) {
+                                handleProcessRequest(request, 'rejected', comment);
+                              }
+                            }}
+                            className="btn btn-danger"
+                          >
+                            Ablehnen
+                          </button>
+                          <button 
+                            onClick={() => {
+                              // Hier könnte ein Modal für komplexere Bearbeitung geöffnet werden
+                              const newStart = prompt('Neue Startzeit (HH:MM):', request.newStartTime ? formatTime(request.newStartTime) : '');
+                              const newEnd = prompt('Neue Endzeit (HH:MM):', request.newEndTime ? formatTime(request.newEndTime) : '');
+                              const comment = prompt('Kommentar:');
+                              
+                              if (newStart || newEnd) {
+                                const finalValues: any = {};
+                                if (newStart) finalValues.startTime = `${entry?.date}T${newStart}:00`;
+                                if (newEnd) finalValues.endTime = `${entry?.date}T${newEnd}:00`;
+                                
+                                handleProcessRequest(request, 'modified', comment || undefined, finalValues);
+                              }
+                            }}
+                            className="btn btn-warning"
+                          >
+                            Modifizieren
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+            
+            <h3>Bearbeitete Änderungsanträge</h3>
+            <div className="requests-list">
+              {changeRequests
+                .filter(r => r.status !== 'pending')
+                .slice(0, 10) // Zeige nur die letzten 10
+                .map(request => {
+                  const requestUser = users.find(u => u.id === request.userId);
+                  const processedByUser = users.find(u => u.id === request.processedBy);
+                  
+                  return (
+                    <div key={request.id} className="request-card processed">
+                      <div className="request-header">
+                        <h4>{requestUser?.name} - {formatDate(request.createdAt)}</h4>
+                        <span className={`status-badge status-${request.status}`}>
+                          {request.status === 'approved' ? 'Genehmigt' : 
+                           request.status === 'rejected' ? 'Abgelehnt' : 'Modifiziert'}
+                        </span>
+                      </div>
+                      <p>Bearbeitet von: {processedByUser?.name} am {formatDate(request.processedAt!)}</p>
+                      {request.adminComment && <p>Kommentar: {request.adminComment}</p>}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

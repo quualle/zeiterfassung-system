@@ -1,4 +1,4 @@
-import { User, TimeEntry } from '../types';
+import { User, TimeEntry, ChangeRequest } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Benutzer-Funktionen
@@ -96,6 +96,7 @@ export const getTimeEntries = async (): Promise<TimeEntry[]> => {
     breaks: (breaks || [])
       .filter(b => b.time_entry_id === entry.id)
       .map(b => ({
+        id: b.id,
         startTime: b.start_time,
         endTime: b.end_time,
         reason: b.reason
@@ -137,6 +138,7 @@ export const getTodayEntry = async (userId: string): Promise<TimeEntry | null> =
     endTime: entry.end_time,
     date: entry.date,
     breaks: (breaks || []).map(b => ({
+      id: b.id,
       startTime: b.start_time,
       endTime: b.end_time,
       reason: b.reason
@@ -235,5 +237,192 @@ export const saveTimeEntry = async (entry: TimeEntry): Promise<void> => {
         }
       }
     }
+  }
+};
+
+// Änderungsanträge-Funktionen
+export const createChangeRequest = async (request: Omit<ChangeRequest, 'id' | 'createdAt' | 'status'>): Promise<void> => {
+  const { error } = await supabase
+    .from('change_requests_zeiterfassung')
+    .insert({
+      user_id: request.userId,
+      time_entry_id: request.timeEntryId,
+      request_type: request.requestType,
+      break_id: request.breakId,
+      current_start_time: request.currentStartTime,
+      current_end_time: request.currentEndTime,
+      current_reason: request.currentReason,
+      new_start_time: request.newStartTime,
+      new_end_time: request.newEndTime,
+      new_reason: request.newReason,
+      change_reason: request.changeReason
+    });
+    
+  if (error) {
+    console.error('Error creating change request:', error);
+    throw error;
+  }
+};
+
+export const getChangeRequests = async (userId?: string): Promise<ChangeRequest[]> => {
+  let query = supabase
+    .from('change_requests_zeiterfassung')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+  
+  const { data, error } = await query;
+  
+  if (error || !data) {
+    console.error('Error fetching change requests:', error);
+    return [];
+  }
+  
+  return data.map(req => ({
+    id: req.id,
+    userId: req.user_id,
+    timeEntryId: req.time_entry_id,
+    requestType: req.request_type,
+    breakId: req.break_id,
+    currentStartTime: req.current_start_time,
+    currentEndTime: req.current_end_time,
+    currentReason: req.current_reason,
+    newStartTime: req.new_start_time,
+    newEndTime: req.new_end_time,
+    newReason: req.new_reason,
+    changeReason: req.change_reason,
+    status: req.status,
+    adminComment: req.admin_comment,
+    finalStartTime: req.final_start_time,
+    finalEndTime: req.final_end_time,
+    finalReason: req.final_reason,
+    createdAt: req.created_at,
+    processedAt: req.processed_at,
+    processedBy: req.processed_by
+  }));
+};
+
+export const processChangeRequest = async (
+  requestId: string, 
+  status: 'approved' | 'rejected' | 'modified',
+  adminId: string,
+  adminComment?: string,
+  finalValues?: {
+    startTime?: string;
+    endTime?: string;
+    reason?: string;
+  }
+): Promise<void> => {
+  const updateData: any = {
+    status,
+    processed_at: new Date().toISOString(),
+    processed_by: adminId,
+    admin_comment: adminComment
+  };
+  
+  if (finalValues) {
+    updateData.final_start_time = finalValues.startTime;
+    updateData.final_end_time = finalValues.endTime;
+    updateData.final_reason = finalValues.reason;
+  }
+  
+  const { error } = await supabase
+    .from('change_requests_zeiterfassung')
+    .update(updateData)
+    .eq('id', requestId);
+    
+  if (error) {
+    console.error('Error processing change request:', error);
+    throw error;
+  }
+  
+  // Wenn genehmigt oder modifiziert, die eigentlichen Daten aktualisieren
+  if (status === 'approved' || status === 'modified') {
+    const { data: request } = await supabase
+      .from('change_requests_zeiterfassung')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+      
+    if (request) {
+      if (request.request_type === 'time_entry') {
+        const { error: updateError } = await supabase
+          .from('time_entries_zeiterfassung')
+          .update({
+            start_time: finalValues?.startTime || request.new_start_time,
+            end_time: finalValues?.endTime || request.new_end_time
+          })
+          .eq('id', request.time_entry_id);
+          
+        if (updateError) {
+          console.error('Error updating time entry:', updateError);
+        }
+      } else if (request.request_type === 'break' && request.break_id) {
+        const { error: updateError } = await supabase
+          .from('breaks_zeiterfassung')
+          .update({
+            start_time: finalValues?.startTime || request.new_start_time,
+            end_time: finalValues?.endTime || request.new_end_time,
+            reason: finalValues?.reason || request.new_reason
+          })
+          .eq('id', request.break_id);
+          
+        if (updateError) {
+          console.error('Error updating break:', updateError);
+        }
+      }
+    }
+  }
+};
+
+// Direkte Editierfunktion für Admin
+export const directUpdateTimeEntry = async (
+  entryId: string,
+  updates: {
+    startTime?: string;
+    endTime?: string;
+    date?: string;
+  }
+): Promise<void> => {
+  const updateData: any = {};
+  if (updates.startTime) updateData.start_time = updates.startTime;
+  if (updates.endTime) updateData.end_time = updates.endTime;
+  if (updates.date) updateData.date = updates.date;
+  
+  const { error } = await supabase
+    .from('time_entries_zeiterfassung')
+    .update(updateData)
+    .eq('id', entryId);
+    
+  if (error) {
+    console.error('Error updating time entry:', error);
+    throw error;
+  }
+};
+
+export const directUpdateBreak = async (
+  breakId: string,
+  updates: {
+    startTime?: string;
+    endTime?: string;
+    reason?: string;
+  }
+): Promise<void> => {
+  const updateData: any = {};
+  if (updates.startTime) updateData.start_time = updates.startTime;
+  if (updates.endTime) updateData.end_time = updates.endTime;
+  if (updates.reason) updateData.reason = updates.reason;
+  
+  const { error } = await supabase
+    .from('breaks_zeiterfassung')
+    .update(updateData)
+    .eq('id', breakId);
+    
+  if (error) {
+    console.error('Error updating break:', error);
+    throw error;
   }
 };

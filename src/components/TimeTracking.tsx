@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, TimeEntry } from '../types';
-import { getTodayEntry, saveTimeEntry } from '../utils/storageProvider';
-import { formatTime, calculateDuration, calculateTotalWorkTime } from '../utils/time';
+import { getTodayEntry, saveTimeEntry, getUserTimeEntries } from '../utils/storageProvider';
+import { formatTime, calculateDuration, calculateTotalWorkTime, formatDate } from '../utils/time';
+import { ChangeRequestModal } from './ChangeRequestModal';
 
 interface TimeTrackingProps {
   user: User;
@@ -15,6 +16,9 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   const [breakReason, setBreakReason] = useState('');
   const [showBreakForm, setShowBreakForm] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [recentEntries, setRecentEntries] = useState<TimeEntry[]>([]);
+  const [showChangeRequest, setShowChangeRequest] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -33,6 +37,18 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
     };
     loadTodayEntry();
   }, [user.id]);
+
+  useEffect(() => {
+    const loadRecentEntries = async () => {
+      const entries = await getUserTimeEntries(user.id);
+      // Zeige die letzten 7 Tage
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const recent = entries.filter(e => new Date(e.date) >= sevenDaysAgo);
+      setRecentEntries(recent);
+    };
+    loadRecentEntries();
+  }, [user.id, currentEntry]);
 
   const startWork = async () => {
     const newEntry: TimeEntry = {
@@ -193,7 +209,58 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
             )}
           </div>
         )}
+
+        {/* Abschnitt für Änderungsanträge */}
+        <div className="section">
+          <h3>Vergangene Arbeitszeiten</h3>
+          {recentEntries.length > 0 ? (
+            <div className="entries-list">
+              {recentEntries.map((entry) => (
+                <div key={entry.id} className="entry-item">
+                  <div className="entry-info">
+                    <strong>{formatDate(entry.date)}</strong>
+                    <br />
+                    Start: {formatTime(entry.startTime)}
+                    {entry.endTime && <> - Ende: {formatTime(entry.endTime)}</>}
+                    <br />
+                    {entry.breaks.length > 0 && (
+                      <span className="breaks-count">{entry.breaks.length} Pause(n)</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedEntry(entry);
+                      setShowChangeRequest(true);
+                    }}
+                    className="btn btn-small btn-secondary"
+                  >
+                    Änderung beantragen
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>Keine vergangenen Arbeitszeiten in den letzten 7 Tagen.</p>
+          )}
+        </div>
       </main>
+
+      {/* Modal für Änderungsanträge */}
+      {showChangeRequest && selectedEntry && (
+        <ChangeRequestModal
+          userId={user.id}
+          entry={selectedEntry}
+          onClose={() => {
+            setShowChangeRequest(false);
+            setSelectedEntry(null);
+          }}
+          onSuccess={() => {
+            setShowChangeRequest(false);
+            setSelectedEntry(null);
+            alert('Ihr Änderungsantrag wurde erfolgreich eingereicht.');
+          }}
+        />
+      )}
     </div>
   );
 };
