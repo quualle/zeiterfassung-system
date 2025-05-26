@@ -180,6 +180,13 @@ export const saveTimeEntry = async (entry: TimeEntry): Promise<void> => {
     
     if (error) {
       console.error('Error creating time entry:', error);
+      console.error('Attempted data:', {
+        id: entry.id,
+        user_id: entry.userId,
+        start_time: entry.startTime,
+        end_time: entry.endTime,
+        date: entry.date
+      });
     }
   }
 
