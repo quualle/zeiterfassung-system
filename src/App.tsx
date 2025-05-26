@@ -3,14 +3,17 @@ import { Login } from './components/Login';
 import { TimeTracking } from './components/TimeTracking';
 import { AdminDashboard } from './components/AdminDashboard';
 import { User } from './types';
-import { initializeUsers } from './utils/storage';
+import { initializeUsers } from './utils/storageProvider';
 import './App.css';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
-    initializeUsers();
+    const init = async () => {
+      await initializeUsers();
+    };
+    init();
   }, []);
 
   const handleLogin = (user: User) => {

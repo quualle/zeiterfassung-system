@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, TimeEntry } from '../types';
-import { getTodayEntry, saveTimeEntry } from '../utils/storage';
+import { getTodayEntry, saveTimeEntry } from '../utils/storageProvider';
 import { formatTime, calculateDuration, calculateTotalWorkTime } from '../utils/time';
 
 interface TimeTrackingProps {
@@ -22,16 +22,19 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   }, []);
 
   useEffect(() => {
-    const todayEntry = getTodayEntry(user.id);
-    if (todayEntry) {
-      setCurrentEntry(todayEntry);
-      setIsWorking(true);
-      const hasActiveBreak = todayEntry.breaks.some(b => !b.endTime);
-      setIsOnBreak(hasActiveBreak);
-    }
+    const loadTodayEntry = async () => {
+      const todayEntry = await getTodayEntry(user.id);
+      if (todayEntry) {
+        setCurrentEntry(todayEntry);
+        setIsWorking(true);
+        const hasActiveBreak = todayEntry.breaks.some(b => !b.endTime);
+        setIsOnBreak(hasActiveBreak);
+      }
+    };
+    loadTodayEntry();
   }, [user.id]);
 
-  const startWork = () => {
+  const startWork = async () => {
     const newEntry: TimeEntry = {
       id: `${user.id}-${Date.now()}`,
       userId: user.id,
@@ -41,23 +44,23 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
     };
     setCurrentEntry(newEntry);
     setIsWorking(true);
-    saveTimeEntry(newEntry);
+    await saveTimeEntry(newEntry);
   };
 
-  const endWork = () => {
+  const endWork = async () => {
     if (currentEntry) {
       const updatedEntry = {
         ...currentEntry,
         endTime: new Date().toISOString()
       };
-      saveTimeEntry(updatedEntry);
+      await saveTimeEntry(updatedEntry);
       setCurrentEntry(null);
       setIsWorking(false);
       setIsOnBreak(false);
     }
   };
 
-  const startBreak = () => {
+  const startBreak = async () => {
     if (!breakReason.trim()) {
       alert('Bitte geben Sie einen Grund für die Pause an.');
       return;
@@ -76,11 +79,11 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
       setIsOnBreak(true);
       setShowBreakForm(false);
       setBreakReason('');
-      saveTimeEntry(updatedEntry);
+      await saveTimeEntry(updatedEntry);
     }
   };
 
-  const endBreak = () => {
+  const endBreak = async () => {
     if (currentEntry) {
       const updatedBreaks = [...currentEntry.breaks];
       const lastBreakIndex = updatedBreaks.length - 1;
@@ -94,7 +97,7 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
       };
       setCurrentEntry(updatedEntry);
       setIsOnBreak(false);
-      saveTimeEntry(updatedEntry);
+      await saveTimeEntry(updatedEntry);
     }
   };
 

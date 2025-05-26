@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { authenticateUser, getUsers, getUserByName, updateUser } from '../utils/storage';
+import { authenticateUser, getUsers, getUserByName, updateUser } from '../utils/storageProvider';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -16,18 +16,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isFirstLogin, setIsFirstLogin] = useState(false);
 
   useEffect(() => {
-    const allUsers = getUsers();
-    setUsers(allUsers);
+    const loadUsers = async () => {
+      const allUsers = await getUsers();
+      setUsers(allUsers);
+    };
+    loadUsers();
   }, []);
 
-  const handleUsernameChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleUsernameChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const username = e.target.value;
     setSelectedUsername(username);
     setError('');
     setPin('');
     
     if (username) {
-      const user = getUserByName(username);
+      const user = await getUserByName(username);
       if (user && user.firstLogin) {
         setIsFirstLogin(true);
       } else {
@@ -36,7 +39,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedUsername) {
@@ -44,7 +47,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
-    const user = getUserByName(selectedUsername);
+    const user = await getUserByName(selectedUsername);
     if (!user) {
       setError('Benutzer nicht gefunden');
       return;
@@ -68,11 +71,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         pin: newPin,
         firstLogin: false
       };
-      updateUser(updatedUser);
+      await updateUser(updatedUser);
       onLogin(updatedUser);
     } else {
       // Normale Anmeldung
-      const authenticatedUser = authenticateUser(selectedUsername, pin);
+      const authenticatedUser = await authenticateUser(selectedUsername, pin);
       
       if (authenticatedUser) {
         onLogin(authenticatedUser);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, TimeEntry } from '../types';
-import { getUsers, getTimeEntries } from '../utils/storage';
+import { getUsers, getTimeEntries } from '../utils/storageProvider';
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 
 interface AdminDashboardProps {
@@ -15,8 +15,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
-    setUsers(getUsers());
-    setEntries(getTimeEntries());
+    const loadData = async () => {
+      const [usersData, entriesData] = await Promise.all([
+        getUsers(),
+        getTimeEntries()
+      ]);
+      setUsers(usersData);
+      setEntries(entriesData);
+    };
+    loadData();
   }, []);
 
   const filteredEntries = entries.filter(entry => {

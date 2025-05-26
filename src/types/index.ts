@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   name: string;
-  pin?: string;
+  pin?: string | null;
   role: 'admin' | 'employee';
   firstLogin?: boolean;
 }
