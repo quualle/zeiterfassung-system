@@ -36,7 +36,7 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
 
   const startWork = async () => {
     const newEntry: TimeEntry = {
-      id: `${user.id}-${Date.now()}`,
+      id: crypto.randomUUID(), // Generiere einen echten UUID
       userId: user.id,
       startTime: new Date().toISOString(),
       date: new Date().toISOString().split('T')[0],
