@@ -146,13 +146,13 @@ export const getTodayEntry = async (userId: string): Promise<TimeEntry | null> =
 
 export const saveTimeEntry = async (entry: TimeEntry): Promise<void> => {
   // Prüfen ob Entry existiert
-  const { data: existing } = await supabase
+  const { data: existing, error: checkError } = await supabase
     .from('time_entries_zeiterfassung')
     .select('id')
-    .eq('id', entry.id)
-    .single();
+    .eq('id', entry.id);
 
-  if (existing) {
+  // Entry existiert wenn kein Fehler und Daten vorhanden sind
+  if (!checkError && existing && existing.length > 0) {
     // Update existing entry
     const { error } = await supabase
       .from('time_entries_zeiterfassung')
