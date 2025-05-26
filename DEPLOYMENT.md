@@ -2,20 +2,9 @@
 
 ## Schritt-für-Schritt Anleitung
 
-### 1. GitHub Repository erstellen
+### 1. ✅ GitHub Repository (bereits erledigt)
 
-1. Gehen Sie zu https://github.com/new
-2. Erstellen Sie ein neues Repository (z.B. "zeiterfassung-system")
-3. Führen Sie folgende Befehle im Projektordner aus:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/IHR-USERNAME/zeiterfassung-system.git
-git push -u origin main
-```
+Das Repository ist bereits unter https://github.com/quualle/zeiterfassung-system verfügbar.
 
 ### 2. Netlify Deployment
 
