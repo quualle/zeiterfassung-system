@@ -116,25 +116,26 @@ export const getTodayEntry = async (userId: string): Promise<TimeEntry | null> =
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
-    .is('end_time', null)
-    .single();
+    .filter('end_time', 'is', null);
   
-  if (error || !entries) {
+  if (error || !entries || entries.length === 0) {
     return null;
   }
+
+  const entry = entries[0];
 
   // Pausen holen
   const { data: breaks } = await supabase
     .from('breaks_zeiterfassung')
     .select('*')
-    .eq('time_entry_id', entries.id);
+    .eq('time_entry_id', entry.id);
 
   return {
-    id: entries.id,
-    userId: entries.user_id,
-    startTime: entries.start_time,
-    endTime: entries.end_time,
-    date: entries.date,
+    id: entry.id,
+    userId: entry.user_id,
+    startTime: entry.start_time,
+    endTime: entry.end_time,
+    date: entry.date,
     breaks: (breaks || []).map(b => ({
       startTime: b.start_time,
       endTime: b.end_time,
@@ -220,7 +221,7 @@ export const saveTimeEntry = async (entry: TimeEntry): Promise<void> => {
           .from('breaks_zeiterfassung')
           .update({ end_time: lastBreak.endTime })
           .eq('time_entry_id', entry.id)
-          .is('end_time', null);
+          .filter('end_time', 'is', null);
         
         if (error) {
           console.error('Error updating break:', error);

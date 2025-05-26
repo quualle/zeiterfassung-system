@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase Connection Test</title>
+</head>
+<body>
+    <h1>Supabase Connection Test</h1>
+    <pre id="result"></pre>
+    
+    <script>
+        // Ersetzen Sie diese Werte mit Ihren aktuellen aus Supabase
+        const SUPABASE_URL = 'https://zqhpdlzsgrahvcsrjufw.supabase.co';
+        const SUPABASE_ANON_KEY = 'IHR_AKTUELLER_ANON_KEY_AUS_SUPABASE';
+        
+        async function testConnection() {
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/users_zeiterfassung?select=*`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                
+                if (!response.ok) {
+                    console.error('Error:', response.status, data);
+                }
+            } catch (error) {
+                document.getElementById('result').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // Test starten
+        testConnection();
+    </script>
+</body>
+</html>
