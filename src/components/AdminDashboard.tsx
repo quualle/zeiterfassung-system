@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, TimeEntry, ChangeRequest } from '../types';
 import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest } from '../utils/storageProvider';
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
+import { TimeTracking } from './TimeTracking';
 
 interface AdminDashboardProps {
   user: User;
@@ -14,7 +15,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedUserId, setSelectedUserId] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking'>('overview');
 
   useEffect(() => {
     const loadData = async () => {
@@ -110,6 +111,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             onClick={() => setActiveTab('requests')}
           >
             Änderungsanträge ({changeRequests.filter(r => r.status === 'pending').length})
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'timetracking' ? 'active' : ''}`}
+            onClick={() => setActiveTab('timetracking')}
+          >
+            Meine Zeiterfassung
           </button>
         </div>
 
@@ -221,7 +228,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </div>
         </div>
           </>
-        ) : (
+        ) : activeTab === 'requests' ? (
           /* Änderungsanträge Tab */
           <div className="change-requests-section">
             <h3>Offene Änderungsanträge</h3>
@@ -338,7 +345,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                 })}
             </div>
           </div>
-        )}
+        ) : activeTab === 'timetracking' ? (
+          /* Zeiterfassung für Admin */
+          <div className="admin-timetracking">
+            <TimeTracking 
+              user={user} 
+              onLogout={() => {
+                // Wechsle zurück zur Übersicht beim Logout
+                setActiveTab('overview');
+                onLogout();
+              }} 
+            />
+          </div>
+        ) : null}
       </main>
     </div>
   );
