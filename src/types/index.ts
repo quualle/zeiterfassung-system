@@ -57,6 +57,17 @@ export interface ChangeRequest {
   processedBy?: string;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  message: string;
+  type: 'auto_clock_out' | 'general';
+  createdAt: string;
+  read: boolean;
+  relatedEmployeeId?: string;
+  relatedEmployeeName?: string;
+}
+
 export interface AppState {
   currentUser: User | null;
   isWorking: boolean;

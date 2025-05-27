@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, TimeEntry, ChangeRequest } from '../types';
-import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest } from '../utils/storageProvider';
+import { User, TimeEntry, ChangeRequest, Notification } from '../types';
+import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest, getNotifications, markNotificationAsRead } from '../utils/storageProvider';
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 import { TimeTracking } from './TimeTracking';
 
@@ -15,21 +15,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedUserId, setSelectedUserId] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking'>('overview');
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking' | 'notifications'>('overview');
 
   useEffect(() => {
     const loadData = async () => {
-      const [usersData, entriesData, requestsData] = await Promise.all([
+      const [usersData, entriesData, requestsData, notificationsData] = await Promise.all([
         getUsers(),
         getTimeEntries(),
-        getChangeRequests()
+        getChangeRequests(),
+        getNotifications(user.id)
       ]);
       setUsers(usersData);
       setEntries(entriesData);
       setChangeRequests(requestsData);
+      setNotifications(notificationsData);
     };
     loadData();
-  }, []);
+    
+    // Aktualisiere Benachrichtigungen alle 30 Sekunden
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [user.id]);
 
   const filteredEntries = entries.filter(entry => {
     const matchesUser = selectedUserId === 'all' || entry.userId === selectedUserId;
@@ -117,6 +124,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             onClick={() => setActiveTab('timetracking')}
           >
             Meine Zeiterfassung
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'notifications' ? 'active' : ''}`}
+            onClick={() => setActiveTab('notifications')}
+          >
+            Benachrichtigungen ({notifications.filter(n => !n.read).length})
           </button>
         </div>
 
@@ -356,6 +369,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                 onLogout();
               }} 
             />
+          </div>
+        ) : activeTab === 'notifications' ? (
+          /* Benachrichtigungen */
+          <div className="notifications-section">
+            <h2>Benachrichtigungen</h2>
+            {notifications.length === 0 ? (
+              <p>Keine Benachrichtigungen vorhanden.</p>
+            ) : (
+              <div className="notifications-list">
+                {notifications.map(notification => (
+                  <div 
+                    key={notification.id} 
+                    className={`notification-item ${!notification.read ? 'unread' : ''}`}
+                  >
+                    <div className="notification-content">
+                      <p className="notification-message">{notification.message}</p>
+                      <p className="notification-time">
+                        {formatDate(notification.createdAt)} um {formatTime(notification.createdAt)}
+                      </p>
+                      {notification.relatedEmployeeName && (
+                        <p className="notification-employee">
+                          Betrifft: {notification.relatedEmployeeName}
+                        </p>
+                      )}
+                    </div>
+                    {!notification.read && (
+                      <button
+                        onClick={async () => {
+                          await markNotificationAsRead(notification.id);
+                          setNotifications(notifications.map(n => 
+                            n.id === notification.id ? { ...n, read: true } : n
+                          ));
+                        }}
+                        className="btn btn-small btn-secondary"
+                      >
+                        Als gelesen markieren
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : null}
       </main>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, TimeEntry } from '../types';
-import { getTodayEntry, saveTimeEntry, getUserTimeEntries } from '../utils/storageProvider';
+import { User, TimeEntry, Notification } from '../types';
+import { getTodayEntry, saveTimeEntry, getUserTimeEntries, saveNotification, getUsers } from '../utils/storageProvider';
 import { formatTime, calculateDuration, calculateTotalWorkTime, formatDate } from '../utils/time';
 import { ChangeRequestModal } from './ChangeRequestModal';
 
@@ -21,9 +21,23 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const timer = setInterval(() => {
+      const now = new Date();
+      setCurrentTime(now);
+      
+      // Automatisches Ausstempeln prüfen
+      if (currentEntry && !currentEntry.endTime) {
+        const startTime = new Date(currentEntry.startTime);
+        const hoursWorked = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+        
+        // Prüfung: 12 Stunden erreicht oder 22 Uhr
+        if (hoursWorked >= 12 || now.getHours() >= 22) {
+          handleAutoClockOut();
+        }
+      }
+    }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [currentEntry]);
 
   useEffect(() => {
     const loadTodayEntry = async () => {
@@ -51,11 +65,24 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   }, [user.id, currentEntry]);
 
   const startWork = async () => {
+    const now = new Date();
+    
+    // Prüfung für Lisa Bayer: Darf nicht vor 8:45 Uhr einstempeln
+    if (user.name === 'Lisa Bayer') {
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      
+      if (currentHour < 8 || (currentHour === 8 && currentMinute < 45)) {
+        alert('Sie dürfen sich nicht vor 8:45 Uhr einstempeln.');
+        return;
+      }
+    }
+    
     const newEntry: TimeEntry = {
       id: crypto.randomUUID(), // Generiere einen echten UUID
       userId: user.id,
-      startTime: new Date().toISOString(),
-      date: new Date().toISOString().split('T')[0],
+      startTime: now.toISOString(),
+      date: now.toISOString().split('T')[0],
       breaks: []
     };
     setCurrentEntry(newEntry);
@@ -115,6 +142,55 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
       setIsOnBreak(false);
       await saveTimeEntry(updatedEntry);
     }
+  };
+
+  const handleAutoClockOut = async () => {
+    if (!currentEntry || currentEntry.endTime) return;
+    
+    const now = new Date();
+    
+    // Automatisch ausstempeln
+    const updatedEntry = {
+      ...currentEntry,
+      endTime: now.toISOString()
+    };
+    await saveTimeEntry(updatedEntry);
+    
+    // Benachrichtigung für den Mitarbeiter erstellen
+    const employeeNotification: Notification = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      message: `Sie wurden automatisch um ${formatTime(now.toISOString())} ausgestempelt, da Sie entweder 12 Stunden gearbeitet haben oder es 22 Uhr war.`,
+      type: 'auto_clock_out',
+      createdAt: now.toISOString(),
+      read: false
+    };
+    await saveNotification(employeeNotification);
+    
+    // Benachrichtigung für Admin (Ines) erstellen
+    const users = await getUsers();
+    const adminUser = users.find(u => u.name === 'Ines Cürten' && u.role === 'admin');
+    
+    if (adminUser) {
+      const adminNotification: Notification = {
+        id: crypto.randomUUID(),
+        userId: adminUser.id,
+        message: `${user.name} wurde gestern Abend automatisch um ${formatTime(now.toISOString())} ausgestempelt und hat vergessen sich auszustempeln.`,
+        type: 'auto_clock_out',
+        createdAt: now.toISOString(),
+        read: false,
+        relatedEmployeeId: user.id,
+        relatedEmployeeName: user.name
+      };
+      await saveNotification(adminNotification);
+    }
+    
+    // UI aktualisieren
+    setCurrentEntry(null);
+    setIsWorking(false);
+    setIsOnBreak(false);
+    
+    alert('Sie wurden automatisch ausgestempelt, da Sie entweder 12 Stunden gearbeitet haben oder es 22 Uhr war.');
   };
 
   return (

@@ -1,4 +1,4 @@
-import { User, TimeEntry, ChangeRequest } from '../types';
+import { User, TimeEntry, ChangeRequest, Notification } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Benutzer-Funktionen
@@ -423,6 +423,63 @@ export const directUpdateBreak = async (
     
   if (error) {
     console.error('Error updating break:', error);
+    throw error;
+  }
+};
+
+// Notification functions
+export const saveNotification = async (notification: Notification): Promise<void> => {
+  const { error } = await supabase
+    .from('notifications_zeiterfassung')
+    .insert({
+      id: notification.id,
+      user_id: notification.userId,
+      message: notification.message,
+      type: notification.type,
+      created_at: notification.createdAt,
+      read: notification.read,
+      related_employee_id: notification.relatedEmployeeId,
+      related_employee_name: notification.relatedEmployeeName
+    });
+    
+  if (error) {
+    console.error('Error saving notification:', error);
+    throw error;
+  }
+};
+
+export const getNotifications = async (userId: string): Promise<Notification[]> => {
+  const { data, error } = await supabase
+    .from('notifications_zeiterfassung')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+    
+  if (error) {
+    console.error('Error fetching notifications:', error);
+    return [];
+  }
+  
+  return data.map(n => ({
+    id: n.id,
+    userId: n.user_id,
+    message: n.message,
+    type: n.type,
+    createdAt: n.created_at,
+    read: n.read,
+    relatedEmployeeId: n.related_employee_id,
+    relatedEmployeeName: n.related_employee_name
+  }));
+};
+
+export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('notifications_zeiterfassung')
+    .update({ read: true })
+    .eq('id', notificationId);
+    
+  if (error) {
+    console.error('Error marking notification as read:', error);
     throw error;
   }
 };

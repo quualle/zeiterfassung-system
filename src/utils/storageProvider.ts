@@ -1,4 +1,4 @@
-import { User, TimeEntry, ChangeRequest } from '../types';
+import { User, TimeEntry, ChangeRequest, Notification } from '../types';
 import * as localStorage from './storage';
 import * as supabaseStorage from './supabaseStorage';
 
@@ -127,4 +127,37 @@ export const directUpdateBreak = async (
     return await supabaseStorage.directUpdateBreak(breakId, updates);
   }
   throw new Error('Direct updates require Supabase');
+};
+
+// Notification functions
+export const saveNotification = async (notification: Notification): Promise<void> => {
+  if (useSupabase) {
+    return await supabaseStorage.saveNotification(notification);
+  }
+  // Local storage implementation
+  const notifications = JSON.parse(window.localStorage.getItem('notifications') || '[]');
+  notifications.push(notification);
+  window.localStorage.setItem('notifications', JSON.stringify(notifications));
+};
+
+export const getNotifications = async (userId: string): Promise<Notification[]> => {
+  if (useSupabase) {
+    return await supabaseStorage.getNotifications(userId);
+  }
+  // Local storage implementation
+  const notifications = JSON.parse(window.localStorage.getItem('notifications') || '[]');
+  return notifications.filter((n: Notification) => n.userId === userId);
+};
+
+export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
+  if (useSupabase) {
+    return await supabaseStorage.markNotificationAsRead(notificationId);
+  }
+  // Local storage implementation
+  const notifications = JSON.parse(window.localStorage.getItem('notifications') || '[]');
+  const index = notifications.findIndex((n: Notification) => n.id === notificationId);
+  if (index !== -1) {
+    notifications[index].read = true;
+    window.localStorage.setItem('notifications', JSON.stringify(notifications));
+  }
 };
