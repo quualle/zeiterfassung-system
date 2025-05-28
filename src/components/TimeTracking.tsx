@@ -37,7 +37,8 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [currentEntry, handleAutoClockOut]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEntry]);
 
   useEffect(() => {
     const loadTodayEntry = async () => {
