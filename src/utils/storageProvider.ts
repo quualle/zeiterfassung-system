@@ -69,6 +69,21 @@ export const saveTimeEntry = async (entry: TimeEntry): Promise<void> => {
   localStorage.saveTimeEntry(entry);
 };
 
+export const clockOut = async (userId: string): Promise<void> => {
+  if (useSupabase) {
+    return await supabaseStorage.clockOut(userId);
+  }
+  // Für localStorage: Hole den heutigen Eintrag und setze die Endzeit
+  const entries = localStorage.getTimeEntries();
+  const today = new Date().toISOString().split('T')[0];
+  const todayEntry = entries.find(e => e.userId === userId && e.date === today && !e.endTime);
+  
+  if (todayEntry) {
+    todayEntry.endTime = new Date().toISOString();
+    localStorage.saveTimeEntry(todayEntry);
+  }
+};
+
 // Änderungsanträge-Funktionen
 export const createChangeRequest = async (request: Omit<ChangeRequest, 'id' | 'createdAt' | 'status'>): Promise<void> => {
   if (useSupabase) {
@@ -130,6 +145,20 @@ export const directUpdateBreak = async (
 };
 
 // Notification functions
+export const createNotification = async (
+  userId: string,
+  message: string,
+  type: 'auto_clock_out' | 'general' = 'general',
+  relatedEmployeeId?: string,
+  relatedEmployeeName?: string
+): Promise<void> => {
+  if (useSupabase) {
+    return await supabaseStorage.createNotification(userId, message, type, relatedEmployeeId, relatedEmployeeName);
+  }
+  // Für localStorage wird keine Benachrichtigung gespeichert
+  console.log('Notification (localStorage only):', { userId, message, type });
+};
+
 export const saveNotification = async (notification: Notification): Promise<void> => {
   if (useSupabase) {
     return await supabaseStorage.saveNotification(notification);

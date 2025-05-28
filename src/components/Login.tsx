@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { authenticateUser, getUsers, getUserByName, updateUser } from '../utils/storageProvider';
+import { supabase } from '../lib/supabase';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -74,7 +75,27 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       await updateUser(updatedUser);
       onLogin(updatedUser);
     } else {
-      // Normale Anmeldung
+      // Normale Anmeldung - Prüfe zuerst Arbeitszeitregeln
+      if (user.role !== 'admin') {
+        // Hole die Arbeitszeitregeln für diesen Benutzer
+        const { data: workTimeRule, error: ruleError } = await supabase
+          .from('work_time_rules')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!ruleError && workTimeRule && workTimeRule.is_active) {
+          const now = new Date();
+          const currentTime = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          
+          if (currentTime < workTimeRule.earliest_login_time) {
+            const earliestTime = workTimeRule.earliest_login_time.substring(0, 5);
+            setError(`Login erst ab ${earliestTime} Uhr möglich`);
+            return;
+          }
+        }
+      }
+
       const authenticatedUser = await authenticateUser(selectedUsername, pin);
       
       if (authenticatedUser) {

@@ -240,6 +240,38 @@ export const saveTimeEntry = async (entry: TimeEntry): Promise<void> => {
   }
 };
 
+// Ausloggen-Funktion
+export const clockOut = async (userId: string): Promise<void> => {
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Hole den heutigen Eintrag
+  const { data: entries, error: fetchError } = await supabase
+    .from('time_entries_zeiterfassung')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .is('end_time', null)
+    .single();
+
+  if (fetchError || !entries) {
+    console.error('No active time entry found for user');
+    return;
+  }
+
+  const endTime = new Date().toISOString();
+
+  // Update den Zeiteintrag mit der Endzeit
+  const { error: updateError } = await supabase
+    .from('time_entries_zeiterfassung')
+    .update({ end_time: endTime })
+    .eq('id', entries.id);
+
+  if (updateError) {
+    console.error('Error updating time entry:', updateError);
+    throw updateError;
+  }
+};
+
 // Änderungsanträge-Funktionen
 export const createChangeRequest = async (request: Omit<ChangeRequest, 'id' | 'createdAt' | 'status'>): Promise<void> => {
   const { error } = await supabase
@@ -444,6 +476,29 @@ export const saveNotification = async (notification: Notification): Promise<void
     
   if (error) {
     console.error('Error saving notification:', error);
+    throw error;
+  }
+};
+
+export const createNotification = async (
+  userId: string,
+  message: string,
+  type: 'auto_clock_out' | 'general' = 'general',
+  relatedEmployeeId?: string,
+  relatedEmployeeName?: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('notifications_zeiterfassung')
+    .insert({
+      user_id: userId,
+      message,
+      type,
+      related_employee_id: relatedEmployeeId,
+      related_employee_name: relatedEmployeeName
+    });
+
+  if (error) {
+    console.error('Error creating notification:', error);
     throw error;
   }
 };

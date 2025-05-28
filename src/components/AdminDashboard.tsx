@@ -3,6 +3,7 @@ import { User, TimeEntry, ChangeRequest, Notification } from '../types';
 import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest, getNotifications, markNotificationAsRead } from '../utils/storageProvider';
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 import { TimeTracking } from './TimeTracking';
+import { WorkTimeRules } from './WorkTimeRules';
 
 interface AdminDashboardProps {
   user: User;
@@ -16,7 +17,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking' | 'notifications'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules'>('overview');
 
   useEffect(() => {
     const loadData = async () => {
@@ -130,6 +131,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             onClick={() => setActiveTab('notifications')}
           >
             Benachrichtigungen ({notifications.filter(n => !n.read).length})
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'worktimerules' ? 'active' : ''}`}
+            onClick={() => setActiveTab('worktimerules')}
+          >
+            Arbeitszeiten
           </button>
         </div>
 
@@ -412,6 +419,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
               </div>
             )}
           </div>
+        ) : activeTab === 'worktimerules' ? (
+          /* Arbeitszeitregeln */
+          <WorkTimeRules users={users} />
         ) : null}
       </main>
     </div>

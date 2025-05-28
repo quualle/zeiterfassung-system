@@ -74,3 +74,13 @@ export interface AppState {
   currentEntry: TimeEntry | null;
   isOnBreak: boolean;
 }
+
+export interface WorkTimeRule {
+  id: string;
+  user_id: string;
+  earliest_login_time: string; // Time format: "HH:MM:SS"
+  latest_logout_time: string; // Time format: "HH:MM:SS"
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
