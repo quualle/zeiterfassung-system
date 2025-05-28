@@ -37,7 +37,7 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [currentEntry]);
+  }, [currentEntry, handleAutoClockOut]);
 
   useEffect(() => {
     const loadTodayEntry = async () => {

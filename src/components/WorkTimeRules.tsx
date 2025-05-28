@@ -11,10 +11,7 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadWorkTimeRules();
-  }, []);
-
-  const loadWorkTimeRules = async () => {
+    const loadWorkTimeRules = async () => {
     try {
       const { data, error } = await supabase
         .from('work_time_rules')
@@ -54,6 +51,9 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
       setLoading(false);
     }
   };
+    
+    loadWorkTimeRules();
+  }, [users]);
 
   const updateWorkTimeRule = async (
     userId: string,
