@@ -26,6 +26,9 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
         user => user.role !== 'admin' && !existingUserIds.includes(user.id)
       );
 
+      console.log('Existing rules:', data);
+      console.log('Users without rules:', usersWithoutRules);
+
       if (usersWithoutRules.length > 0) {
         const newRules = usersWithoutRules.map(user => ({
           user_id: user.id,
@@ -34,13 +37,19 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
           is_active: true
         }));
 
+        console.log('Creating new rules:', newRules);
+
         const { data: insertedData, error: insertError } = await supabase
           .from('work_time_rules')
           .insert(newRules)
           .select();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('Error inserting rules:', insertError);
+          throw insertError;
+        }
 
+        console.log('Inserted rules:', insertedData);
         setWorkTimeRules([...(data || []), ...(insertedData || [])]);
       } else {
         setWorkTimeRules(data || []);
@@ -131,7 +140,16 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
       <div className="rules-container">
         {employeeUsers.map(user => {
           const rule = workTimeRules.find(r => r.user_id === user.id);
-          if (!rule) return null;
+          // Zeige auch Benutzer ohne Regel an
+          const displayRule = rule || {
+            user_id: user.id,
+            earliest_login_time: '08:00:00',
+            latest_logout_time: '18:00:00',
+            is_active: false,
+            id: '',
+            created_at: '',
+            updated_at: ''
+          };
 
           return (
             <div key={user.id} className="rule-card">
@@ -142,7 +160,7 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
                   <label>
                     <input
                       type="checkbox"
-                      checked={rule.is_active}
+                      checked={displayRule.is_active}
                       onChange={(e) => toggleRuleActive(user.id, e.target.checked)}
                     />
                     Regel aktiv
@@ -154,9 +172,9 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
                     <label>Früheste Einloggzeit:</label>
                     <input
                       type="time"
-                      value={formatTimeForInput(rule.earliest_login_time)}
+                      value={formatTimeForInput(displayRule.earliest_login_time)}
                       onChange={(e) => updateWorkTimeRule(user.id, 'earliest_login_time', e.target.value)}
-                      disabled={!rule.is_active}
+                      disabled={!displayRule.is_active}
                     />
                   </div>
 
@@ -164,18 +182,18 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
                     <label>Späteste Ausloggzeit:</label>
                     <input
                       type="time"
-                      value={formatTimeForInput(rule.latest_logout_time)}
+                      value={formatTimeForInput(displayRule.latest_logout_time)}
                       onChange={(e) => updateWorkTimeRule(user.id, 'latest_logout_time', e.target.value)}
-                      disabled={!rule.is_active}
+                      disabled={!displayRule.is_active}
                     />
                   </div>
                 </div>
 
                 <div className="time-range-display">
                   <span className="time-range">
-                    {rule.is_active ? (
+                    {displayRule.is_active ? (
                       <>
-                        Arbeitszeit: {formatTimeForInput(rule.earliest_login_time)} - {formatTimeForInput(rule.latest_logout_time)}
+                        Arbeitszeit: {formatTimeForInput(displayRule.earliest_login_time)} - {formatTimeForInput(displayRule.latest_logout_time)}
                       </>
                     ) : (
                       <span className="inactive">Keine Zeitbeschränkung aktiv</span>
