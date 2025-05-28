@@ -117,10 +117,17 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
   }
 
   const employeeUsers = users.filter(u => u.role !== 'admin');
+  
+  console.log('All users:', users);
+  console.log('Employee users:', employeeUsers);
+  console.log('Work time rules:', workTimeRules);
 
   return (
     <div className="work-time-rules">
       <h2>Arbeitszeitregeln</h2>
+      {employeeUsers.length === 0 ? (
+        <p>Keine Mitarbeiter gefunden. Stellen Sie sicher, dass Mitarbeiter in der Datenbank existieren.</p>
+      ) : (
       <div className="rules-container">
         {employeeUsers.map(user => {
           const rule = workTimeRules.find(r => r.user_id === user.id);
@@ -180,6 +187,7 @@ export const WorkTimeRules: React.FC<WorkTimeRulesProps> = ({ users }) => {
           );
         })}
       </div>
+      )}
     </div>
   );
 };
