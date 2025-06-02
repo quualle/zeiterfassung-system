@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, TimeEntry, Notification } from '../types';
+import { User, TimeEntry, Notification, WorkTimeRule } from '../types';
 import { getTodayEntry, saveTimeEntry, getUserTimeEntries, saveNotification, getUsers } from '../utils/storageProvider';
 import { formatTime, calculateDuration, calculateTotalWorkTime, formatDate } from '../utils/time';
 import { ChangeRequestModal } from './ChangeRequestModal';
+import { supabase } from '../lib/supabase';
 
 interface TimeTrackingProps {
   user: User;
@@ -19,6 +20,35 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   const [recentEntries, setRecentEntries] = useState<TimeEntry[]>([]);
   const [showChangeRequest, setShowChangeRequest] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null);
+  const [workTimeRule, setWorkTimeRule] = useState<WorkTimeRule | null>(null);
+
+  // Lade Arbeitszeit-Regeln aus der Datenbank
+  useEffect(() => {
+    const loadWorkTimeRule = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('work_time_rules')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+          console.error('Error loading work time rule:', error);
+        }
+
+        if (data) {
+          setWorkTimeRule(data);
+        }
+      } catch (error) {
+        console.error('Error loading work time rule:', error);
+      }
+    };
+
+    if (user.role !== 'admin') {
+      loadWorkTimeRule();
+    }
+  }, [user]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -30,15 +60,28 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
         const startTime = new Date(currentEntry.startTime);
         const hoursWorked = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
         
-        // Prüfung: 12 Stunden erreicht oder 22 Uhr
-        if (hoursWorked >= 12 || now.getHours() >= 22) {
+        // Standard: 12 Stunden oder 22 Uhr
+        let shouldAutoLogout = hoursWorked >= 12 || now.getHours() >= 22;
+        
+        // Prüfe auch die späteste Logout-Zeit aus den Regeln
+        if (workTimeRule && workTimeRule.is_active && workTimeRule.latest_logout_time) {
+          const [latestHour, latestMinute] = workTimeRule.latest_logout_time.split(':').map(Number);
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
+          
+          if (currentHour > latestHour || (currentHour === latestHour && currentMinute >= latestMinute)) {
+            shouldAutoLogout = true;
+          }
+        }
+        
+        if (shouldAutoLogout) {
           handleAutoClockOut();
         }
       }
     }, 1000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentEntry]);
+  }, [currentEntry, workTimeRule]);
 
   useEffect(() => {
     const loadTodayEntry = async () => {
@@ -68,13 +111,22 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   const startWork = async () => {
     const now = new Date();
     
-    // Prüfung für Lisa Bayer: Darf nicht vor 8:45 Uhr einstempeln
-    if (user.name === 'Lisa Bayer') {
+    console.log('Starting work - Current time:', now.toLocaleTimeString('de-DE'));
+    console.log('Work time rule:', workTimeRule);
+    
+    // Prüfung basierend auf Arbeitszeit-Regeln aus der Datenbank
+    if (workTimeRule && workTimeRule.is_active) {
+      // Parse die früheste Login-Zeit
+      const [earliestHour, earliestMinute] = workTimeRule.earliest_login_time.split(':').map(Number);
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
       
-      if (currentHour < 8 || (currentHour === 8 && currentMinute < 45)) {
-        alert('Sie dürfen sich nicht vor 8:45 Uhr einstempeln.');
+      console.log(`Earliest login time: ${earliestHour}:${earliestMinute}`);
+      console.log(`Current time: ${currentHour}:${currentMinute}`);
+      
+      // Vergleiche die aktuelle Zeit mit der frühesten erlaubten Login-Zeit
+      if (currentHour < earliestHour || (currentHour === earliestHour && currentMinute < earliestMinute)) {
+        alert(`Sie dürfen sich nicht vor ${earliestHour.toString().padStart(2, '0')}:${earliestMinute.toString().padStart(2, '0')} Uhr einstempeln.`);
         return;
       }
     }
