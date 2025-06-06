@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { syncWithBackend, checkBackendHealth } from '../utils/backendSync';
 import '../App.css';
@@ -16,6 +16,7 @@ interface Activity {
   preview: string | null;
   user_email: string | null;
   user_name: string | null;
+  raw_data?: any;
 }
 
 interface SyncStatus {
@@ -23,6 +24,16 @@ interface SyncStatus {
   last_sync_timestamp: string | null;
   sync_status: string;
   error_message: string | null;
+}
+
+interface PhoneStatistics {
+  phoneNumber: string;
+  totalCalls: number;
+  totalMinutes: number;
+  inboundMinutes: number;
+  outboundMinutes: number;
+  inboundCalls: number;
+  outboundCalls: number;
 }
 
 export const ActivityLog: React.FC = () => {
@@ -33,6 +44,80 @@ export const ActivityLog: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [selectedPhone, setSelectedPhone] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Get unique phone numbers from call activities with user names
+  const phoneNumbers = useMemo(() => {
+    const phoneMap = new Map<string, string>();
+    activities
+      .filter(a => a.activity_type === 'call' && a.raw_data?.number?.digits)
+      .forEach(a => {
+        const phoneNumber = a.raw_data?.number?.digits;
+        const userName = a.user_name || phoneNumber;
+        if (phoneNumber && !phoneMap.has(phoneNumber)) {
+          phoneMap.set(phoneNumber, userName);
+        }
+      });
+    return Array.from(phoneMap.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [activities]);
+
+  // Filter activities based on selected phone and date
+  const filteredActivities = useMemo(() => {
+    return activities.filter(activity => {
+      const activityDate = new Date(activity.timestamp).toISOString().split('T')[0];
+      const phoneMatch = selectedPhone === 'all' || 
+        (activity.activity_type === 'call' && activity.raw_data?.number?.digits === selectedPhone) ||
+        (activity.activity_type !== 'call' && activity.user_email === selectedPhone);
+      const dateMatch = !selectedDate || activityDate === selectedDate;
+      return phoneMatch && dateMatch;
+    });
+  }, [activities, selectedPhone, selectedDate]);
+
+  // Calculate statistics for the selected date
+  const statistics = useMemo((): PhoneStatistics[] => {
+    const statsMap = new Map<string, PhoneStatistics>();
+    
+    activities
+      .filter(a => {
+        const activityDate = new Date(a.timestamp).toISOString().split('T')[0];
+        return a.activity_type === 'call' && (!selectedDate || activityDate === selectedDate);
+      })
+      .forEach(activity => {
+        const phone = activity.raw_data?.number?.digits || activity.user_email || 'Unknown';
+        const userName = activity.user_name || phone;
+        
+        if (!statsMap.has(phone)) {
+          statsMap.set(phone, {
+            phoneNumber: userName,
+            totalCalls: 0,
+            totalMinutes: 0,
+            inboundMinutes: 0,
+            outboundMinutes: 0,
+            inboundCalls: 0,
+            outboundCalls: 0
+          });
+        }
+        
+        const stats = statsMap.get(phone)!;
+        stats.totalCalls++;
+        
+        if (activity.duration_seconds) {
+          const minutes = activity.duration_seconds / 60;
+          stats.totalMinutes += minutes;
+          
+          if (activity.direction === 'inbound') {
+            stats.inboundMinutes += minutes;
+            stats.inboundCalls++;
+          } else if (activity.direction === 'outbound') {
+            stats.outboundMinutes += minutes;
+            stats.outboundCalls++;
+          }
+        }
+      });
+    
+    return Array.from(statsMap.values()).sort((a, b) => b.totalCalls - a.totalCalls);
+  }, [activities, selectedDate]);
 
   // Fetch activities from Supabase
   const fetchActivities = async () => {
@@ -140,7 +225,7 @@ export const ActivityLog: React.FC = () => {
   };
 
   // Group activities by date
-  const groupedActivities = activities.reduce((groups, activity) => {
+  const groupedActivities = filteredActivities.reduce((groups, activity) => {
     const date = formatDate(activity.timestamp);
     if (!groups[date]) {
       groups[date] = [];
@@ -251,6 +336,106 @@ export const ActivityLog: React.FC = () => {
         </div>
       </div>
 
+      {/* Filters */}
+      <div style={{
+        display: 'flex',
+        gap: '20px',
+        marginBottom: '20px',
+        padding: '15px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px'
+      }}>
+        <div>
+          <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Datum:</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={{
+              padding: '5px',
+              borderRadius: '4px',
+              border: '1px solid #ccc'
+            }}
+          />
+        </div>
+        
+        <div>
+          <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Telefonnummer:</label>
+          <select
+            value={selectedPhone}
+            onChange={(e) => setSelectedPhone(e.target.value)}
+            style={{
+              padding: '5px',
+              borderRadius: '4px',
+              border: '1px solid #ccc',
+              minWidth: '200px'
+            }}
+          >
+            <option value="all">Alle Nummern</option>
+            {phoneNumbers.map(([phone, name]) => (
+              <option key={phone} value={phone}>
+                {name} ({phone})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Statistics */}
+      {statistics.length > 0 && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#e8f4f8',
+          borderRadius: '8px'
+        }}>
+          <h3 style={{ marginTop: 0 }}>Anrufstatistik {selectedDate ? `für ${formatDate(selectedDate + 'T00:00:00')}` : ''}</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #007bff' }}>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Teammitglied</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Anrufe gesamt</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Eingehend</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Ausgehend</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Minuten gesamt</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Min. eingehend</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Min. ausgehend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statistics.map((stat, index) => (
+                  <tr key={stat.phoneNumber} style={{ 
+                    borderBottom: '1px solid #ddd',
+                    backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'
+                  }}>
+                    <td style={{ padding: '10px' }}>{stat.phoneNumber}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold' }}>
+                      {stat.totalCalls}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                      {stat.inboundCalls}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                      {stat.outboundCalls}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold' }}>
+                      {Math.round(stat.totalMinutes)}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                      {Math.round(stat.inboundMinutes)}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                      {Math.round(stat.outboundMinutes)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Activities List */}
       <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
         {Object.entries(groupedActivities).map(([date, dateActivities]) => (
@@ -264,8 +449,8 @@ export const ActivityLog: React.FC = () => {
                 onClick={() => setSelectedActivity(activity)}
                 className="activity-item"
                 style={{
-                  padding: '10px',
-                  marginBottom: '5px',
+                  padding: '12px',
+                  marginBottom: '8px',
                   backgroundColor: '#f9f9f9',
                   borderRadius: '5px',
                   cursor: 'pointer',
@@ -273,27 +458,51 @@ export const ActivityLog: React.FC = () => {
                   transition: 'all 0.2s'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '20px' }}>
-                    {getActivityIcon(activity.activity_type, activity.direction)}
-                  </span>
-                  <span style={{ fontWeight: 'bold' }}>
-                    {formatTime(activity.timestamp)}
-                  </span>
-                  <span>-</span>
-                  <span>{getActivityDescription(activity)}</span>
-                  {activity.subject && (
-                    <span style={{ 
-                      fontSize: '12px', 
-                      color: '#666',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      maxWidth: '300px'
-                    }}>
-                      ({activity.subject})
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '20px' }}>
+                      {getActivityIcon(activity.activity_type, activity.direction)}
                     </span>
-                  )}
+                    <span style={{ fontWeight: 'bold' }}>
+                      {formatTime(activity.timestamp)}
+                    </span>
+                    <span>-</span>
+                    <span>{getActivityDescription(activity)}</span>
+                    {activity.user_name && (
+                      <span style={{ 
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px'
+                      }}>
+                        {activity.user_name}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div style={{ paddingLeft: '30px', fontSize: '14px', color: '#666' }}>
+                    {activity.contact_name && (
+                      <span style={{ marginRight: '15px' }}>
+                        <strong>Kontakt:</strong> {activity.contact_name}
+                      </span>
+                    )}
+                    {activity.contact_phone && (
+                      <span style={{ marginRight: '15px' }}>
+                        <strong>Tel:</strong> {activity.contact_phone}
+                      </span>
+                    )}
+                    {activity.contact_email && (
+                      <span style={{ marginRight: '15px' }}>
+                        <strong>Email:</strong> {activity.contact_email}
+                      </span>
+                    )}
+                    {activity.subject && (
+                      <span>
+                        <strong>Betreff:</strong> {activity.subject}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
