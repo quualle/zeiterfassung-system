@@ -288,64 +288,25 @@ async function syncAircallCalls() {
   }
 }
 
-// Gmail sync function (simplified - requires OAuth setup)
+// Gmail sync function (requires OAuth setup)
 async function syncGmailEmails() {
   console.log('Syncing Gmail emails...');
   
   try {
-    // For now, we'll create sample data
-    // In production, implement proper OAuth2 flow
-    const sampleEmails = [
-      {
-        id: `gmail_${Date.now()}_1`,
-        subject: 'Anfrage Pflegeberatung',
-        snippet: 'Sehr geehrtes Team, wir benötigen Unterstützung für meine Mutter...',
-        from: 'pflegeteam.heer@pflegehilfe-senioren.de',
-        to: 'kunde@example.com',
-        date: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        id: `gmail_${Date.now()}_2`,
-        subject: 'Terminbestätigung',
-        snippet: 'Hiermit bestätige ich Ihnen den Termin am Montag...',
-        from: 'ines.cuerten@pflegehilfe-senioren.de',
-        to: 'familie.schmidt@example.com',
-        date: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
-      }
-    ];
-
-    let syncedCount = 0;
+    // OAuth not yet implemented - return 0 activities
+    // In production, implement proper OAuth2 flow here
     
-    for (const email of sampleEmails) {
-      const { error } = await supabase.from('activities').upsert({
-        source_system: 'gmail',
-        source_id: email.id,
-        activity_type: 'email',
-        direction: 'outbound',
-        timestamp: email.date,
-        subject: email.subject,
-        preview: email.snippet.substring(0, 200),
-        user_email: email.from,
-        contact_email: email.to,
-        raw_data: email,
-      }, {
-        onConflict: 'source_system,source_id',
-      });
-      
-      if (!error) syncedCount++;
-    }
-
     await supabase
       .from('sync_status')
       .update({
         last_sync_timestamp: new Date().toISOString(),
         last_successful_sync: new Date().toISOString(),
         sync_status: 'success',
-        error_message: 'Sample data - OAuth not configured',
+        error_message: 'OAuth not configured - no data synced',
       })
       .eq('source_system', 'gmail');
 
-    return { success: true, count: syncedCount, message: `${syncedCount} emails (sample data)` };
+    return { success: true, count: 0, message: 'Gmail OAuth not configured' };
   } catch (error) {
     console.error('Gmail sync error:', error);
     
