@@ -1,5 +1,3 @@
-import { supabase } from '../lib/supabase';
-
 // Backend URL - update this after deploying to Render
 const BACKEND_URL = process.env.REACT_APP_SYNC_BACKEND_URL || 'http://localhost:3001';
 
