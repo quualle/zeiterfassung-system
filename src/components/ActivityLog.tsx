@@ -128,8 +128,6 @@ export const ActivityLog: React.FC = () => {
 
   // Get activity description
   const getActivityDescription = (activity: Activity) => {
-    const contact = activity.contact_name || activity.contact_email || activity.contact_phone || 'Unbekannt';
-    
     if (activity.activity_type === 'call') {
       const duration = activity.duration_seconds 
         ? ` (${formatDuration(activity.duration_seconds)})` 
