@@ -374,6 +374,16 @@ async function syncAircallCalls() {
     
     console.log(`Processing ${calls.length} calls from Aircall...`);
     
+    // Debug: Show first few calls to check format
+    if (calls.length > 0) {
+      console.log('Sample call format:', {
+        from: calls[0].from,
+        to: calls[0].to,
+        raw_digits: calls[0].raw_digits,
+        number_digits: calls[0].number?.digits
+      });
+    }
+    
     for (const call of calls) {
       // Only sync calls from last 30 days
       if (call.started_at < thirtyDaysAgo) continue;
@@ -383,10 +393,18 @@ async function syncAircallCalls() {
       logTimestampConversion('Aircall', call.started_at, isoTime);
       
       // Filter by phone numbers - check both from and to numbers
-      const callNumbers = [call.from, call.to, call.number?.digits].filter(Boolean);
-      const isRelevantCall = callNumbers.some(num => 
-        allowedNumbers.some(allowed => num && num.includes(allowed.replace(/\+/g, '')))
-      );
+      const callNumbers = [call.from, call.to, call.raw_digits, call.number?.digits].filter(Boolean);
+      
+      // Normalize numbers for comparison (remove spaces and +)
+      const normalizeNumber = (num) => num ? num.replace(/[\s+]/g, '') : '';
+      
+      const isRelevantCall = callNumbers.some(num => {
+        const normalizedNum = normalizeNumber(num);
+        return allowedNumbers.some(allowed => {
+          const normalizedAllowed = normalizeNumber(allowed);
+          return normalizedNum.includes(normalizedAllowed) || normalizedAllowed.includes(normalizedNum);
+        });
+      });
       
       if (!isRelevantCall) {
         skippedCount++;
