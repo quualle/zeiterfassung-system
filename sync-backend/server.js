@@ -242,7 +242,7 @@ async function syncAircallCalls() {
         password: apiToken
       },
       params: {
-        per_page: 50,
+        per_page: 100,  // Increased to get more calls since we're filtering
         order: 'desc'
       },
       timeout: 10000, // 10 second timeout
@@ -272,10 +272,32 @@ async function syncAircallCalls() {
 
     const calls = response.data.calls || [];
     let syncedCount = 0;
+    let skippedCount = 0;
+    
+    // Filter for specific phone numbers (Marco, Ines, and local numbers)
+    const allowedNumbers = [
+      '+4915735999713',    // Marco mobil
+      '+49303149420347',   // Marco Festnetz
+      '+49303149420357',   // Ines Festnetz  
+      '+4991815473001'     // lokal
+    ];
+    
+    console.log(`Processing ${calls.length} calls from Aircall...`);
     
     for (const call of calls) {
       // Only sync calls from last 30 days
       if (call.started_at < thirtyDaysAgo) continue;
+      
+      // Filter by phone numbers - check both from and to numbers
+      const callNumbers = [call.from, call.to, call.number?.digits].filter(Boolean);
+      const isRelevantCall = callNumbers.some(num => 
+        allowedNumbers.some(allowed => num && num.includes(allowed.replace(/\+/g, '')))
+      );
+      
+      if (!isRelevantCall) {
+        skippedCount++;
+        continue;
+      }
       
       const contactName = call.contact ? 
         `${call.contact.first_name || ''} ${call.contact.last_name || ''}`.trim() : 
@@ -314,7 +336,8 @@ async function syncAircallCalls() {
       })
       .eq('source_system', 'aircall');
 
-    return { success: true, count: syncedCount, message: `${syncedCount} calls synced` };
+    console.log(`Aircall sync complete: ${syncedCount} synced, ${skippedCount} skipped (not from allowed numbers)`);
+    return { success: true, count: syncedCount, message: `${syncedCount} relevante Anrufe synchronisiert` };
   } catch (error) {
     console.error('Aircall sync error:', error.response?.data || error.message);
     
