@@ -10,10 +10,44 @@ import './App.css';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const init = async () => {
+      // Check for saved session in localStorage
+      const savedSession = localStorage.getItem('adminSession');
+      if (savedSession) {
+        try {
+          const session = JSON.parse(savedSession);
+          // Check if session is still valid (24 hours)
+          const sessionTime = new Date(session.timestamp).getTime();
+          const now = new Date().getTime();
+          const hoursSinceLogin = (now - sessionTime) / (1000 * 60 * 60);
+          
+          if (hoursSinceLogin < 24) {
+            // Restore user from database
+            const { data: user } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.userId)
+              .single();
+              
+            if (user && user.role === 'admin') {
+              setCurrentUser(user);
+            } else {
+              localStorage.removeItem('adminSession');
+            }
+          } else {
+            localStorage.removeItem('adminSession');
+          }
+        } catch (error) {
+          console.error('Error restoring session:', error);
+          localStorage.removeItem('adminSession');
+        }
+      }
+      
       await initializeUsers();
+      setLoading(false);
     };
     init();
   }, []);
@@ -74,11 +108,28 @@ function App() {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    
+    // Save admin session to localStorage
+    if (user.role === 'admin') {
+      localStorage.setItem('adminSession', JSON.stringify({
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      }));
+    }
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('adminSession');
   };
+
+  if (loading) {
+    return (
+      <div className="container" style={{ textAlign: 'center', marginTop: '50px' }}>
+        <h2>Laden...</h2>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return <Login onLogin={handleLogin} />;
