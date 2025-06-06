@@ -8,17 +8,8 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware with explicit CORS configuration
-app.use(cors({
-  origin: [
-    'https://zeiterfassung-system.netlify.app',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Middleware
+app.use(cors());
 app.use(express.json());
 
 // Initialize Supabase
@@ -103,16 +94,14 @@ app.post('/sync', async (req, res) => {
   }
 });
 
-// BigQuery sync function - FIXED for STRING type created_at
+// BigQuery sync function
 async function syncBigQueryTickets() {
   console.log('Syncing BigQuery tickets...');
   
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoString = thirtyDaysAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
 
-    // Fixed query - using STRING comparison since created_at is STRING in your BigQuery
     const query = `
       WITH ticket_data AS (
         SELECT 
@@ -125,7 +114,7 @@ async function syncBigQueryTickets() {
         LEFT JOIN \`gcpxbixpflegehilfesenioren.dataform_staging.tickets_creation_end\` tc
           ON t._id = tc.Ticket_ID
         WHERE tc.seller = 'Pflegeteam Heer'
-          AND t.created_at >= '${thirtyDaysAgoString}'
+          AND t.created_at >= TIMESTAMP('${thirtyDaysAgo.toISOString()}')
       )
       SELECT * FROM ticket_data
       ORDER BY ticket_created_at DESC
@@ -147,23 +136,12 @@ async function syncBigQueryTickets() {
         preview = row.subject || '';
       }
 
-      // Convert string timestamp to ISO format
-      let timestamp;
-      try {
-        // Handle various date formats
-        timestamp = new Date(row.ticket_created_at).toISOString();
-      } catch (e) {
-        // If parsing fails, use current time
-        timestamp = new Date().toISOString();
-        console.warn('Could not parse timestamp:', row.ticket_created_at);
-      }
-
       const { error } = await supabase.from('activities').upsert({
         source_system: 'bigquery',
         source_id: `bigquery_${row.ticket_id}`,
         activity_type: 'ticket',
         direction: 'outbound',
-        timestamp: timestamp,
+        timestamp: row.ticket_created_at,
         subject: row.subject,
         preview,
         user_name: row.ticket_seller,
@@ -172,11 +150,7 @@ async function syncBigQueryTickets() {
         onConflict: 'source_system,source_id',
       });
       
-      if (!error) {
-        syncedCount++;
-      } else {
-        console.error('Error inserting activity:', error);
-      }
+      if (!error) syncedCount++;
     }
 
     await supabase
@@ -206,67 +180,30 @@ async function syncBigQueryTickets() {
   }
 }
 
-// Aircall sync function - with better error handling
+// Aircall sync function
 async function syncAircallCalls() {
   console.log('Syncing Aircall calls...');
   
   try {
-    // Check if API key is configured
-    if (!process.env.AIRCALL_API_KEY) {
-      console.log('Aircall API Key not configured');
-      return { 
-        success: false, 
-        count: 0, 
-        message: 'Aircall API Key not configured in environment variables' 
-      };
-    }
-    
-    console.log('Aircall API Key present:', process.env.AIRCALL_API_KEY.substring(0, 10) + '...');
-    
     const thirtyDaysAgo = Math.floor(new Date().getTime() / 1000) - (30 * 24 * 60 * 60);
     
-    // Test with smaller request first
-    const response = await axios.get('https://api.aircall.io/v1/calls', {
+    const response = await axios.get('https://api.aircall.io/v1/calls/search', {
       auth: {
         username: process.env.AIRCALL_API_KEY,
         password: ''
       },
       params: {
-        per_page: 50,
-        order: 'desc'
+        per_page: 100,
+        order: 'desc',
+        from: thirtyDaysAgo,
+        fetch_contact: 'true',
       },
-      timeout: 10000, // 10 second timeout
-      validateStatus: function (status) {
-        return status < 500; // Don't throw on 4xx errors
-      }
     });
-
-    // Check if we got a 403 or other error
-    if (response.status === 403) {
-      console.error('Aircall API returned 403 Forbidden');
-      return { 
-        success: false, 
-        count: 0, 
-        message: 'Aircall API Key ist ungültig oder hat keine Berechtigung. Bitte prüfen Sie den API Key.' 
-      };
-    }
-    
-    if (response.status !== 200) {
-      console.error('Aircall API returned status:', response.status);
-      return { 
-        success: false, 
-        count: 0, 
-        message: `Aircall API Fehler: ${response.status} ${response.statusText}` 
-      };
-    }
 
     const calls = response.data.calls || [];
     let syncedCount = 0;
     
     for (const call of calls) {
-      // Only sync calls from last 30 days
-      if (call.started_at < thirtyDaysAgo) continue;
-      
       const contactName = call.contact ? 
         `${call.contact.first_name || ''} ${call.contact.last_name || ''}`.trim() : 
         null;
@@ -287,11 +224,7 @@ async function syncAircallCalls() {
         onConflict: 'source_system,source_id',
       });
       
-      if (!error) {
-        syncedCount++;
-      } else {
-        console.error('Error inserting call:', error);
-      }
+      if (!error) syncedCount++;
     }
 
     await supabase
@@ -306,50 +239,79 @@ async function syncAircallCalls() {
 
     return { success: true, count: syncedCount, message: `${syncedCount} calls synced` };
   } catch (error) {
-    console.error('Aircall sync error:', error.response?.data || error.message);
-    
-    // If 403 Forbidden, the API key might be invalid
-    if (error.response?.status === 403) {
-      console.error('Aircall API Key seems to be invalid or lacks permissions');
-    }
+    console.error('Aircall sync error:', error);
     
     await supabase
       .from('sync_status')
       .update({
         last_sync_timestamp: new Date().toISOString(),
         sync_status: 'error',
-        error_message: error.response?.data?.message || error.message,
+        error_message: error.message,
       })
       .eq('source_system', 'aircall');
     
-    // Don't throw, just return error
-    return { 
-      success: false, 
-      count: 0, 
-      message: `Aircall error: ${error.response?.data?.message || error.message}` 
-    };
+    throw error;
   }
 }
 
-// Gmail sync function (requires OAuth setup)
+// Gmail sync function (simplified - requires OAuth setup)
 async function syncGmailEmails() {
   console.log('Syncing Gmail emails...');
   
   try {
-    // OAuth not yet implemented - return 0 activities
-    // In production, implement proper OAuth2 flow here
+    // For now, we'll create sample data
+    // In production, implement proper OAuth2 flow
+    const sampleEmails = [
+      {
+        id: `gmail_${Date.now()}_1`,
+        subject: 'Anfrage Pflegeberatung',
+        snippet: 'Sehr geehrtes Team, wir benötigen Unterstützung für meine Mutter...',
+        from: 'pflegeteam.heer@pflegehilfe-senioren.de',
+        to: 'kunde@example.com',
+        date: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        id: `gmail_${Date.now()}_2`,
+        subject: 'Terminbestätigung',
+        snippet: 'Hiermit bestätige ich Ihnen den Termin am Montag...',
+        from: 'ines.cuerten@pflegehilfe-senioren.de',
+        to: 'familie.schmidt@example.com',
+        date: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+
+    let syncedCount = 0;
     
+    for (const email of sampleEmails) {
+      const { error } = await supabase.from('activities').upsert({
+        source_system: 'gmail',
+        source_id: email.id,
+        activity_type: 'email',
+        direction: 'outbound',
+        timestamp: email.date,
+        subject: email.subject,
+        preview: email.snippet.substring(0, 200),
+        user_email: email.from,
+        contact_email: email.to,
+        raw_data: email,
+      }, {
+        onConflict: 'source_system,source_id',
+      });
+      
+      if (!error) syncedCount++;
+    }
+
     await supabase
       .from('sync_status')
       .update({
         last_sync_timestamp: new Date().toISOString(),
         last_successful_sync: new Date().toISOString(),
         sync_status: 'success',
-        error_message: 'OAuth not configured - no data synced',
+        error_message: 'Sample data - OAuth not configured',
       })
       .eq('source_system', 'gmail');
 
-    return { success: true, count: 0, message: 'Gmail OAuth not configured' };
+    return { success: true, count: syncedCount, message: `${syncedCount} emails (sample data)` };
   } catch (error) {
     console.error('Gmail sync error:', error);
     
@@ -362,11 +324,7 @@ async function syncGmailEmails() {
       })
       .eq('source_system', 'gmail');
     
-    return { 
-      success: false, 
-      count: 0, 
-      message: `Gmail error: ${error.message}` 
-    };
+    throw error;
   }
 }
 
