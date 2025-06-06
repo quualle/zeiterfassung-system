@@ -232,11 +232,14 @@ async function syncAircallCalls() {
       : [process.env.AIRCALL_API_KEY, ''];
     
     console.log('Using Aircall API ID:', apiId);
+    console.log('API Token length:', apiToken.length);
+    console.log('Full auth string length:', process.env.AIRCALL_API_KEY.length);
     
-    // Test with smaller request first
+    // Try also with direct auth object syntax
     const response = await axios.get('https://api.aircall.io/v1/calls', {
-      headers: {
-        'Authorization': `Basic ${Buffer.from(`${apiId}:${apiToken}`).toString('base64')}`
+      auth: {
+        username: apiId,
+        password: apiToken
       },
       params: {
         per_page: 50,
