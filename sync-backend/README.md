@@ -19,7 +19,9 @@ Backend service for syncing activity data from BigQuery, Aircall, and Gmail to S
    - `SUPABASE_URL`: Your Supabase project URL
    - `SUPABASE_SERVICE_ROLE_KEY`: Service role key (from Supabase dashboard)
    - `BIGQUERY_CREDENTIALS`: Complete JSON credentials (paste as single line)
-   - `AIRCALL_API_KEY`: Your Aircall API key
+   - `AIRCALL_API_KEY`: Your Aircall API credentials in format `api_id:api_token`
+     - Example: `aaa06cd853xxx:bbb123456yyy`
+     - Get these from your Aircall dashboard under API Keys
 
 ## Local Development
 

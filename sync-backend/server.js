@@ -225,11 +225,18 @@ async function syncAircallCalls() {
     
     const thirtyDaysAgo = Math.floor(new Date().getTime() / 1000) - (30 * 24 * 60 * 60);
     
+    // Aircall uses API ID and API Token for authentication
+    // The API Key should be in format "api_id:api_token"
+    const [apiId, apiToken] = process.env.AIRCALL_API_KEY.includes(':') 
+      ? process.env.AIRCALL_API_KEY.split(':')
+      : [process.env.AIRCALL_API_KEY, ''];
+    
+    console.log('Using Aircall API ID:', apiId);
+    
     // Test with smaller request first
     const response = await axios.get('https://api.aircall.io/v1/calls', {
-      auth: {
-        username: process.env.AIRCALL_API_KEY,
-        password: ''
+      headers: {
+        'Authorization': `Basic ${Buffer.from(`${apiId}:${apiToken}`).toString('base64')}`
       },
       params: {
         per_page: 50,
