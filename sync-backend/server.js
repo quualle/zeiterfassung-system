@@ -332,8 +332,9 @@ async function syncAircallCalls() {
         password: apiToken
       },
       params: {
-        per_page: 100,  // Increased to get more calls since we're filtering
-        order: 'desc'
+        per_page: 200,  // Further increased to get more calls since we're filtering
+        order: 'desc',
+        from: thirtyDaysAgo  // Only get calls from last 30 days
       },
       timeout: 10000, // 10 second timeout
       validateStatus: function (status) {
@@ -380,8 +381,18 @@ async function syncAircallCalls() {
         from: calls[0].from,
         to: calls[0].to,
         raw_digits: calls[0].raw_digits,
-        number_digits: calls[0].number?.digits
+        number_digits: calls[0].number?.digits,
+        direction: calls[0].direction,
+        user: calls[0].user?.name
       });
+      
+      // Count calls by number to see distribution
+      const numberCounts = {};
+      calls.forEach(call => {
+        const number = call.number?.digits || 'unknown';
+        numberCounts[number] = (numberCounts[number] || 0) + 1;
+      });
+      console.log('Calls by number:', numberCounts);
     }
     
     for (const call of calls) {
@@ -408,6 +419,10 @@ async function syncAircallCalls() {
       
       if (!isRelevantCall) {
         skippedCount++;
+        // Log first few skipped calls to debug
+        if (skippedCount <= 5) {
+          console.log(`Skipped call - from: ${call.raw_digits || call.from}, to: ${call.to}, number: ${call.number?.digits}`);
+        }
         continue;
       }
       
