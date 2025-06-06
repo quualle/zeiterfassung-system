@@ -199,6 +199,7 @@ export const ActivityLog: React.FC = () => {
               <div 
                 key={activity.id}
                 onClick={() => setSelectedActivity(activity)}
+                className="activity-item"
                 style={{
                   padding: '10px',
                   marginBottom: '5px',
@@ -206,11 +207,7 @@ export const ActivityLog: React.FC = () => {
                   borderRadius: '5px',
                   cursor: 'pointer',
                   border: '1px solid #eee',
-                  transition: 'all 0.2s',
-                  ':hover': {
-                    backgroundColor: '#f0f0f0',
-                    borderColor: '#ddd'
-                  }
+                  transition: 'all 0.2s'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

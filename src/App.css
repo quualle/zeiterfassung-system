@@ -885,3 +885,9 @@ tr:hover {
   color: #9ca3af;
   font-style: italic;
 }
+
+/* Activity Log Styles */
+.activity-item:hover {
+  background-color: #f0f0f0 !important;
+  border-color: #ddd !important;
+}
