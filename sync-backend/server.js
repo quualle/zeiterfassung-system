@@ -94,14 +94,16 @@ app.post('/sync', async (req, res) => {
   }
 });
 
-// BigQuery sync function
+// BigQuery sync function - FIXED for STRING type created_at
 async function syncBigQueryTickets() {
   console.log('Syncing BigQuery tickets...');
   
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoString = thirtyDaysAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
 
+    // Fixed query - using STRING comparison since created_at is STRING in your BigQuery
     const query = `
       WITH ticket_data AS (
         SELECT 
@@ -114,7 +116,7 @@ async function syncBigQueryTickets() {
         LEFT JOIN \`gcpxbixpflegehilfesenioren.dataform_staging.tickets_creation_end\` tc
           ON t._id = tc.Ticket_ID
         WHERE tc.seller = 'Pflegeteam Heer'
-          AND t.created_at >= TIMESTAMP('${thirtyDaysAgo.toISOString()}')
+          AND t.created_at >= '${thirtyDaysAgoString}'
       )
       SELECT * FROM ticket_data
       ORDER BY ticket_created_at DESC
@@ -136,12 +138,23 @@ async function syncBigQueryTickets() {
         preview = row.subject || '';
       }
 
+      // Convert string timestamp to ISO format
+      let timestamp;
+      try {
+        // Handle various date formats
+        timestamp = new Date(row.ticket_created_at).toISOString();
+      } catch (e) {
+        // If parsing fails, use current time
+        timestamp = new Date().toISOString();
+        console.warn('Could not parse timestamp:', row.ticket_created_at);
+      }
+
       const { error } = await supabase.from('activities').upsert({
         source_system: 'bigquery',
         source_id: `bigquery_${row.ticket_id}`,
         activity_type: 'ticket',
         direction: 'outbound',
-        timestamp: row.ticket_created_at,
+        timestamp: timestamp,
         subject: row.subject,
         preview,
         user_name: row.ticket_seller,
@@ -150,7 +163,11 @@ async function syncBigQueryTickets() {
         onConflict: 'source_system,source_id',
       });
       
-      if (!error) syncedCount++;
+      if (!error) {
+        syncedCount++;
+      } else {
+        console.error('Error inserting activity:', error);
+      }
     }
 
     await supabase
@@ -180,30 +197,33 @@ async function syncBigQueryTickets() {
   }
 }
 
-// Aircall sync function
+// Aircall sync function - with better error handling
 async function syncAircallCalls() {
   console.log('Syncing Aircall calls...');
   
   try {
     const thirtyDaysAgo = Math.floor(new Date().getTime() / 1000) - (30 * 24 * 60 * 60);
     
-    const response = await axios.get('https://api.aircall.io/v1/calls/search', {
+    // Test with smaller request first
+    const response = await axios.get('https://api.aircall.io/v1/calls', {
       auth: {
         username: process.env.AIRCALL_API_KEY,
         password: ''
       },
       params: {
-        per_page: 100,
-        order: 'desc',
-        from: thirtyDaysAgo,
-        fetch_contact: 'true',
+        per_page: 50,
+        order: 'desc'
       },
+      timeout: 10000 // 10 second timeout
     });
 
     const calls = response.data.calls || [];
     let syncedCount = 0;
     
     for (const call of calls) {
+      // Only sync calls from last 30 days
+      if (call.started_at < thirtyDaysAgo) continue;
+      
       const contactName = call.contact ? 
         `${call.contact.first_name || ''} ${call.contact.last_name || ''}`.trim() : 
         null;
@@ -224,7 +244,11 @@ async function syncAircallCalls() {
         onConflict: 'source_system,source_id',
       });
       
-      if (!error) syncedCount++;
+      if (!error) {
+        syncedCount++;
+      } else {
+        console.error('Error inserting call:', error);
+      }
     }
 
     await supabase
@@ -239,18 +263,28 @@ async function syncAircallCalls() {
 
     return { success: true, count: syncedCount, message: `${syncedCount} calls synced` };
   } catch (error) {
-    console.error('Aircall sync error:', error);
+    console.error('Aircall sync error:', error.response?.data || error.message);
+    
+    // If 403 Forbidden, the API key might be invalid
+    if (error.response?.status === 403) {
+      console.error('Aircall API Key seems to be invalid or lacks permissions');
+    }
     
     await supabase
       .from('sync_status')
       .update({
         last_sync_timestamp: new Date().toISOString(),
         sync_status: 'error',
-        error_message: error.message,
+        error_message: error.response?.data?.message || error.message,
       })
       .eq('source_system', 'aircall');
     
-    throw error;
+    // Don't throw, just return error
+    return { 
+      success: false, 
+      count: 0, 
+      message: `Aircall error: ${error.response?.data?.message || error.message}` 
+    };
   }
 }
 
@@ -324,7 +358,11 @@ async function syncGmailEmails() {
       })
       .eq('source_system', 'gmail');
     
-    throw error;
+    return { 
+      success: false, 
+      count: 0, 
+      message: `Gmail error: ${error.message}` 
+    };
   }
 }
 
