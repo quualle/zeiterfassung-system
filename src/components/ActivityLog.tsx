@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { createSampleActivities } from '../utils/activitySync';
 import { importManualData, generateRealisticActivities } from '../utils/manualDataImport';
+import { syncWithBackend, checkBackendHealth } from '../utils/backendSync';
 import '../App.css';
 
 interface Activity {
@@ -33,6 +34,7 @@ export const ActivityLog: React.FC = () => {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
 
   // Fetch activities from Supabase
   const fetchActivities = async () => {
@@ -69,6 +71,10 @@ export const ActivityLog: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      
+      // Check backend availability
+      const isAvailable = await checkBackendHealth();
+      setBackendAvailable(isAvailable);
       
       // Create sample data on first load (temporary)
       const { count } = await supabase
@@ -170,18 +176,31 @@ export const ActivityLog: React.FC = () => {
     );
   }
 
-  // Manual sync function
+  // Manual sync function - uses backend if available
   const handleManualSync = async () => {
     setSyncing(true);
     setError(null);
     
     try {
-      const result = await importManualData();
-      if (result.success) {
-        await fetchActivities();
-        await fetchSyncStatus();
+      // Try backend sync first
+      if (backendAvailable) {
+        const result = await syncWithBackend();
+        if (result.success) {
+          await fetchActivities();
+          await fetchSyncStatus();
+          console.log('Backend sync successful:', result.details);
+        } else {
+          setError(result.message);
+        }
       } else {
-        setError(result.message);
+        // Fallback to sample data
+        const result = await importManualData();
+        if (result.success) {
+          await fetchActivities();
+          await fetchSyncStatus();
+        } else {
+          setError(result.message);
+        }
       }
     } catch (err: any) {
       setError(err.message);
@@ -251,24 +270,36 @@ export const ActivityLog: React.FC = () => {
               opacity: syncing ? 0.6 : 1
             }}
           >
-            {syncing ? 'Synchronisiere...' : 'Daten aktualisieren'}
+            {syncing ? 'Synchronisiere...' : backendAvailable ? 'APIs synchronisieren' : 'Daten aktualisieren'}
           </button>
           
-          <button
-            onClick={handleGenerateData}
-            disabled={syncing}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: syncing ? 'not-allowed' : 'pointer',
-              opacity: syncing ? 0.6 : 1
-            }}
-          >
-            30 Tage Testdaten
-          </button>
+          {!backendAvailable && (
+            <button
+              onClick={handleGenerateData}
+              disabled={syncing}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: syncing ? 'not-allowed' : 'pointer',
+                opacity: syncing ? 0.6 : 1
+              }}
+            >
+              30 Tage Testdaten
+            </button>
+          )}
+          
+          {backendAvailable === false && (
+            <span style={{ 
+              fontSize: '12px', 
+              color: '#dc3545',
+              marginLeft: '10px'
+            }}>
+              Backend offline - Sample-Daten aktiv
+            </span>
+          )}
         </div>
       </div>
 
