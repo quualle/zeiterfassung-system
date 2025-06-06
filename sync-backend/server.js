@@ -4,6 +4,54 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const { BigQuery } = require('@google-cloud/bigquery');
 const axios = require('axios');
+const moment = require('moment-timezone');
+
+// Set default timezone to Europe/Berlin
+moment.tz.setDefault('Europe/Berlin');
+
+// Helper function to convert timestamps to UTC ISO format
+// The frontend will handle conversion to Berlin timezone for display
+function convertToUTC(timestamp, source = 'unix') {
+  let utcTime;
+  
+  switch(source) {
+    case 'unix':
+      // Unix timestamp (seconds since epoch) - already in UTC
+      utcTime = moment.unix(timestamp).utc();
+      break;
+    case 'iso':
+      // ISO string - parse and ensure UTC
+      utcTime = moment.utc(timestamp);
+      break;
+    case 'string':
+      // Generic string format - parse as UTC
+      utcTime = moment.utc(timestamp);
+      break;
+    default:
+      utcTime = moment.utc(timestamp);
+  }
+  
+  return utcTime.toISOString();
+}
+
+// Helper function to log timestamp conversions for debugging
+function logTimestampConversion(source, originalTimestamp, convertedTimestamp) {
+  const utcMoment = moment.utc(convertedTimestamp);
+  const berlinMoment = utcMoment.clone().tz('Europe/Berlin');
+  
+  console.log(`${source} timestamp conversion:`);
+  console.log(`  - Original: ${originalTimestamp}`);
+  console.log(`  - UTC (stored): ${utcMoment.format('YYYY-MM-DD HH:mm:ss')}`);
+  console.log(`  - Berlin (display): ${berlinMoment.format('YYYY-MM-DD HH:mm:ss')}`);
+}
+
+// Log timezone information on startup
+console.log('Server timezone configuration:');
+console.log('- Server timezone:', moment.tz.guess());
+console.log('- Storage format: UTC (ISO 8601)');
+console.log('- Display timezone: Europe/Berlin (handled by frontend)');
+console.log('- Current UTC time:', moment.utc().format('YYYY-MM-DD HH:mm:ss'));
+console.log('- Current Berlin time:', moment.tz('Europe/Berlin').format('YYYY-MM-DD HH:mm:ss z'));
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,6 +84,45 @@ const bigquery = new BigQuery({
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Sync backend is running' });
+});
+
+// Debug endpoint to check recent activities and their timestamps
+app.get('/debug/activities', async (req, res) => {
+  try {
+    const { data: activities, error } = await supabase
+      .from('activities')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(10);
+    
+    if (error) throw error;
+    
+    const debugInfo = activities.map(activity => {
+      const utcTime = moment.utc(activity.timestamp);
+      const berlinTime = utcTime.clone().tz('Europe/Berlin');
+      
+      return {
+        id: activity.id,
+        source: activity.source_system,
+        type: activity.activity_type,
+        stored_timestamp: activity.timestamp,
+        utc_time: utcTime.format('YYYY-MM-DD HH:mm:ss'),
+        berlin_time: berlinTime.format('YYYY-MM-DD HH:mm:ss z'),
+        timezone_offset: berlinTime.format('Z'),
+        is_dst: berlinTime.isDST() ? 'Yes (CEST)' : 'No (CET)'
+      };
+    });
+    
+    res.json({
+      current_time: {
+        utc: moment.utc().format('YYYY-MM-DD HH:mm:ss'),
+        berlin: moment.tz('Europe/Berlin').format('YYYY-MM-DD HH:mm:ss z')
+      },
+      activities: debugInfo
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Main sync endpoint
@@ -147,14 +234,16 @@ async function syncBigQueryTickets() {
         preview = row.subject || '';
       }
 
-      // Convert string timestamp to ISO format
+      // Convert string timestamp to ISO format with proper timezone handling
       let timestamp;
       try {
-        // Handle various date formats
-        timestamp = new Date(row.ticket_created_at).toISOString();
+        // Parse the timestamp - BigQuery timestamps might be in various formats
+        // Store as UTC, frontend will convert to Berlin time for display
+        timestamp = convertToUTC(row.ticket_created_at, 'string');
+        logTimestampConversion('BigQuery', row.ticket_created_at, timestamp);
       } catch (e) {
-        // If parsing fails, use current time
-        timestamp = new Date().toISOString();
+        // If parsing fails, use current time in Berlin timezone
+        timestamp = moment.tz('Europe/Berlin').toISOString();
         console.warn('Could not parse timestamp:', row.ticket_created_at);
       }
 
@@ -182,8 +271,8 @@ async function syncBigQueryTickets() {
     await supabase
       .from('sync_status')
       .update({
-        last_sync_timestamp: new Date().toISOString(),
-        last_successful_sync: new Date().toISOString(),
+        last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
+        last_successful_sync: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'success',
         error_message: null,
       })
@@ -196,7 +285,7 @@ async function syncBigQueryTickets() {
     await supabase
       .from('sync_status')
       .update({
-        last_sync_timestamp: new Date().toISOString(),
+        last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'error',
         error_message: error.message,
       })
@@ -223,7 +312,8 @@ async function syncAircallCalls() {
     
     console.log('Aircall API Key present:', process.env.AIRCALL_API_KEY.substring(0, 10) + '...');
     
-    const thirtyDaysAgo = Math.floor(new Date().getTime() / 1000) - (30 * 24 * 60 * 60);
+    const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+    console.log(`Fetching Aircall calls from last 30 days (since Unix timestamp: ${thirtyDaysAgo})`);
     
     // Aircall uses API ID and API Token for authentication
     // The API Key should be in format "api_id:api_token"
@@ -288,6 +378,10 @@ async function syncAircallCalls() {
       // Only sync calls from last 30 days
       if (call.started_at < thirtyDaysAgo) continue;
       
+      // Log the timestamp conversion for debugging
+      const isoTime = convertToUTC(call.started_at, 'unix');
+      logTimestampConversion('Aircall', call.started_at, isoTime);
+      
       // Filter by phone numbers - check both from and to numbers
       const callNumbers = [call.from, call.to, call.number?.digits].filter(Boolean);
       const isRelevantCall = callNumbers.some(num => 
@@ -308,7 +402,9 @@ async function syncAircallCalls() {
         source_id: `aircall_${call.id}`,
         activity_type: 'call',
         direction: call.direction,
-        timestamp: new Date(call.started_at * 1000).toISOString(),
+        // Aircall timestamps are Unix timestamps in UTC
+        // Store as UTC, frontend will convert to Berlin time for display
+        timestamp: convertToUTC(call.started_at, 'unix'),
         duration_seconds: call.duration,
         contact_name: contactName,
         contact_phone: call.raw_digits,
@@ -329,8 +425,8 @@ async function syncAircallCalls() {
     await supabase
       .from('sync_status')
       .update({
-        last_sync_timestamp: new Date().toISOString(),
-        last_successful_sync: new Date().toISOString(),
+        last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
+        last_successful_sync: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'success',
         error_message: null,
       })
@@ -349,7 +445,7 @@ async function syncAircallCalls() {
     await supabase
       .from('sync_status')
       .update({
-        last_sync_timestamp: new Date().toISOString(),
+        last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'error',
         error_message: error.response?.data?.message || error.message,
       })
@@ -371,12 +467,14 @@ async function syncGmailEmails() {
   try {
     // OAuth not yet implemented - return 0 activities
     // In production, implement proper OAuth2 flow here
+    // When implemented, ensure timestamps are converted like this:
+    // timestamp: convertToUTC(emailTimestamp, 'iso')
     
     await supabase
       .from('sync_status')
       .update({
-        last_sync_timestamp: new Date().toISOString(),
-        last_successful_sync: new Date().toISOString(),
+        last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
+        last_successful_sync: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'success',
         error_message: 'OAuth not configured - no data synced',
       })
@@ -389,7 +487,7 @@ async function syncGmailEmails() {
     await supabase
       .from('sync_status')
       .update({
-        last_sync_timestamp: new Date().toISOString(),
+        last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'error',
         error_message: error.message,
       })
