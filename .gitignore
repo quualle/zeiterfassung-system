@@ -24,3 +24,6 @@ yarn-error.log*
 # Sensitive files
 credentials.json
 client_secret*.json
+
+# Environment variable files
+netlify_env*.txt
