@@ -325,43 +325,52 @@ async function syncAircallCalls() {
     console.log('API Token length:', apiToken.length);
     console.log('Full auth string length:', process.env.AIRCALL_API_KEY.length);
     
-    // Try also with direct auth object syntax
-    const response = await axios.get('https://api.aircall.io/v1/calls', {
-      auth: {
-        username: apiId,
-        password: apiToken
-      },
-      params: {
-        per_page: 2000,  // Maximum to get all calls since we're filtering heavily
-        order: 'desc',
-        from: thirtyDaysAgo  // Only get calls from last 30 days
-      },
-      timeout: 30000, // 30 second timeout for large requests
-      validateStatus: function (status) {
-        return status < 500; // Don't throw on 4xx errors
+    // Aircall has a max of 50 per page, so we need to paginate
+    let allCalls = [];
+    let currentPage = 1;
+    let hasMorePages = true;
+    
+    console.log('Fetching Aircall calls with pagination...');
+    
+    while (hasMorePages && allCalls.length < 500) { // Limit to 500 calls for safety
+      const response = await axios.get('https://api.aircall.io/v1/calls', {
+        auth: {
+          username: apiId,
+          password: apiToken
+        },
+        params: {
+          per_page: 50,  // Aircall max is 50
+          page: currentPage,
+          order: 'desc',
+          from: thirtyDaysAgo  // Only get calls from last 30 days
+        },
+        timeout: 30000, // 30 second timeout
+        validateStatus: function (status) {
+          return status < 500; // Don't throw on 4xx errors
+        }
+      });
+      
+      if (response.status !== 200) {
+        console.error('Aircall API returned status:', response.status);
+        break;
       }
-    });
-
-    // Check if we got a 403 or other error
-    if (response.status === 403) {
-      console.error('Aircall API returned 403 Forbidden');
-      return { 
-        success: false, 
-        count: 0, 
-        message: 'Aircall API Key ist ungültig oder hat keine Berechtigung. Bitte prüfen Sie den API Key.' 
-      };
+      
+      const pageCalls = response.data.calls || [];
+      allCalls = allCalls.concat(pageCalls);
+      
+      console.log(`Fetched page ${currentPage} with ${pageCalls.length} calls (total: ${allCalls.length})`);
+      
+      // Check if there are more pages
+      hasMorePages = pageCalls.length === 50;
+      currentPage++;
+      
+      // Small delay to avoid rate limiting
+      if (hasMorePages) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
     }
     
-    if (response.status !== 200) {
-      console.error('Aircall API returned status:', response.status);
-      return { 
-        success: false, 
-        count: 0, 
-        message: `Aircall API Fehler: ${response.status} ${response.statusText}` 
-      };
-    }
-
-    const calls = response.data.calls || [];
+    const calls = allCalls;
     let syncedCount = 0;
     let skippedCount = 0;
     
