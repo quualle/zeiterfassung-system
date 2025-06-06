@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Login } from './components/Login';
 import { TimeTracking } from './components/TimeTracking';
 import { AdminDashboard } from './components/AdminDashboard';
+import { ActivityLog } from './components/ActivityLog';
 import { User } from './types';
 import { initializeUsers, clockOut, createNotification } from './utils/storageProvider';
 import { supabase } from './lib/supabase';
@@ -84,6 +85,10 @@ function App() {
   }
 
   if (currentUser.role === 'admin') {
+    // Check if activity log route is requested
+    if (window.location.pathname === '/admin/activity-log') {
+      return <ActivityLog />;
+    }
     return <AdminDashboard user={currentUser} onLogout={handleLogout} />;
   }
 

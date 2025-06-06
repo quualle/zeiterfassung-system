@@ -138,6 +138,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           >
             Arbeitszeiten
           </button>
+          <button 
+            className="tab-button"
+            onClick={() => window.location.href = '/admin/activity-log'}
+          >
+            Aktivitätslog
+          </button>
         </div>
 
         {activeTab === 'overview' ? (

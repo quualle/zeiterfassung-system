@@ -1,0 +1,16 @@
+{
+  "name": "netlify-functions",
+  "version": "1.0.0",
+  "description": "Netlify functions for activity sync",
+  "scripts": {},
+  "dependencies": {
+    "@netlify/functions": "^2.4.1",
+    "@supabase/supabase-js": "^2.39.1",
+    "@google-cloud/bigquery": "^7.3.0",
+    "googleapis": "^128.0.0",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4"
+  }
+}
