@@ -1,79 +1,13 @@
 import { supabase } from '../lib/supabase';
-import axios from 'axios';
 
 // Simple activity sync that runs from the client
 // This is a temporary solution until proper backend OAuth is set up
 
-export async function syncAircallActivities() {
-  console.log('Starting Aircall sync...');
-  
-  try {
-    const AIRCALL_API_KEY = 'c1f3df1855afc3ce2f6661b41b154ce7';
-    const thirtyDaysAgo = Math.floor(new Date().getTime() / 1000) - (30 * 24 * 60 * 60);
-    
-    // Note: This will require CORS to be enabled on Aircall's side
-    // For production, this should be moved to a backend function
-    const response = await axios.get('https://api.aircall.io/v1/calls/search', {
-      auth: {
-        username: AIRCALL_API_KEY,
-        password: ''
-      },
-      params: {
-        per_page: 100,
-        order: 'desc',
-        from: thirtyDaysAgo,
-        fetch_contact: 'true',
-      },
-    });
-
-    const calls = response.data.calls || [];
-    
-    for (const call of calls) {
-      const contactName = call.contact ? 
-        `${call.contact.first_name || ''} ${call.contact.last_name || ''}`.trim() : 
-        null;
-      
-      await supabase.from('activities').upsert({
-        source_system: 'aircall',
-        source_id: `aircall_${call.id}`,
-        activity_type: 'call',
-        direction: call.direction,
-        timestamp: new Date(call.started_at * 1000).toISOString(),
-        duration_seconds: call.duration,
-        contact_name: contactName,
-        contact_phone: call.raw_digits,
-        user_name: call.user?.name,
-        user_email: call.user?.email,
-        raw_data: call,
-      }, {
-        onConflict: 'source_system,source_id',
-      });
-    }
-
-    await supabase
-      .from('sync_status')
-      .update({
-        last_sync_timestamp: new Date().toISOString(),
-        last_successful_sync: new Date().toISOString(),
-        sync_status: 'success',
-        error_message: null,
-      })
-      .eq('source_system', 'aircall');
-
-    console.log('Aircall sync completed');
-  } catch (error: any) {
-    console.error('Aircall sync error:', error);
-    
-    await supabase
-      .from('sync_status')
-      .update({
-        last_sync_timestamp: new Date().toISOString(),
-        sync_status: 'error',
-        error_message: error.message,
-      })
-      .eq('source_system', 'aircall');
-  }
-}
+// Aircall sync temporarily disabled - requires backend implementation
+// export async function syncAircallActivities() {
+//   // Implementation requires axios and proper CORS setup
+//   console.log('Aircall sync not yet implemented');
+// }
 
 // For now, we'll create sample data to test the UI
 export async function createSampleActivities() {
