@@ -36,6 +36,21 @@ interface PhoneStatistics {
   outboundCalls: number;
 }
 
+interface ExtendedStatistics {
+  calls: PhoneStatistics[];
+  totalActivities: number;
+  totalCalls: number;
+  totalEmails: number;
+  totalTickets: number;
+  userStats: Map<string, {
+    name: string;
+    calls: number;
+    emails: number;
+    tickets: number;
+    totalMinutes: number;
+  }>;
+}
+
 export const ActivityLog: React.FC = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus[]>([]);
@@ -45,7 +60,13 @@ export const ActivityLog: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   const [selectedPhone, setSelectedPhone] = useState<string>('all');
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Handle navigation back to main page
+  const handleBackToTimeTracking = () => {
+    window.location.pathname = '/';
+  };
 
   // Get unique phone numbers from call activities with user names
   const phoneNumbers = useMemo(() => {
@@ -62,62 +83,103 @@ export const ActivityLog: React.FC = () => {
     return Array.from(phoneMap.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [activities]);
 
-  // Filter activities based on selected phone and date
+  // Filter activities based on selected phone and date range
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
       const activityDate = new Date(activity.timestamp).toISOString().split('T')[0];
       const phoneMatch = selectedPhone === 'all' || 
         (activity.activity_type === 'call' && activity.raw_data?.number?.digits === selectedPhone) ||
         (activity.activity_type !== 'call' && activity.user_email === selectedPhone);
-      const dateMatch = !selectedDate || activityDate === selectedDate;
+      const dateMatch = (!startDate || activityDate >= startDate) && 
+                       (!endDate || activityDate <= endDate);
       return phoneMatch && dateMatch;
     });
-  }, [activities, selectedPhone, selectedDate]);
+  }, [activities, selectedPhone, startDate, endDate]);
 
-  // Calculate statistics for the selected date
-  const statistics = useMemo((): PhoneStatistics[] => {
-    const statsMap = new Map<string, PhoneStatistics>();
+  // Calculate extended statistics for the selected date range
+  const extendedStatistics = useMemo((): ExtendedStatistics => {
+    const callStatsMap = new Map<string, PhoneStatistics>();
+    const userStatsMap = new Map<string, any>();
+    let totalCalls = 0;
+    let totalEmails = 0;
+    let totalTickets = 0;
     
-    activities
-      .filter(a => {
-        const activityDate = new Date(a.timestamp).toISOString().split('T')[0];
-        return a.activity_type === 'call' && (!selectedDate || activityDate === selectedDate);
-      })
-      .forEach(activity => {
-        const phone = activity.raw_data?.number?.digits || activity.user_email || 'Unknown';
-        const userName = activity.user_name || phone;
-        
-        if (!statsMap.has(phone)) {
-          statsMap.set(phone, {
-            phoneNumber: userName,
-            totalCalls: 0,
-            totalMinutes: 0,
-            inboundMinutes: 0,
-            outboundMinutes: 0,
-            inboundCalls: 0,
-            outboundCalls: 0
-          });
-        }
-        
-        const stats = statsMap.get(phone)!;
-        stats.totalCalls++;
-        
-        if (activity.duration_seconds) {
-          const minutes = activity.duration_seconds / 60;
-          stats.totalMinutes += minutes;
+    filteredActivities.forEach(activity => {
+      const userName = activity.user_name || activity.user_email || 'Unknown';
+      
+      // Initialize user stats if not exists
+      if (!userStatsMap.has(userName)) {
+        userStatsMap.set(userName, {
+          name: userName,
+          calls: 0,
+          emails: 0,
+          tickets: 0,
+          totalMinutes: 0
+        });
+      }
+      
+      const userStats = userStatsMap.get(userName)!;
+      
+      // Count by activity type
+      switch (activity.activity_type) {
+        case 'call':
+          totalCalls++;
+          userStats.calls++;
           
-          if (activity.direction === 'inbound') {
-            stats.inboundMinutes += minutes;
-            stats.inboundCalls++;
-          } else if (activity.direction === 'outbound') {
-            stats.outboundMinutes += minutes;
-            stats.outboundCalls++;
+          const phone = activity.raw_data?.number?.digits || activity.user_email || 'Unknown';
+          const phoneUserName = activity.user_name || phone;
+          
+          if (!callStatsMap.has(phone)) {
+            callStatsMap.set(phone, {
+              phoneNumber: phoneUserName,
+              totalCalls: 0,
+              totalMinutes: 0,
+              inboundMinutes: 0,
+              outboundMinutes: 0,
+              inboundCalls: 0,
+              outboundCalls: 0
+            });
           }
-        }
-      });
+          
+          const callStats = callStatsMap.get(phone)!;
+          callStats.totalCalls++;
+          
+          if (activity.duration_seconds) {
+            const minutes = activity.duration_seconds / 60;
+            callStats.totalMinutes += minutes;
+            userStats.totalMinutes += minutes;
+            
+            if (activity.direction === 'inbound') {
+              callStats.inboundMinutes += minutes;
+              callStats.inboundCalls++;
+            } else if (activity.direction === 'outbound') {
+              callStats.outboundMinutes += minutes;
+              callStats.outboundCalls++;
+            }
+          }
+          break;
+          
+        case 'email':
+          totalEmails++;
+          userStats.emails++;
+          break;
+          
+        case 'ticket':
+          totalTickets++;
+          userStats.tickets++;
+          break;
+      }
+    });
     
-    return Array.from(statsMap.values()).sort((a, b) => b.totalCalls - a.totalCalls);
-  }, [activities, selectedDate]);
+    return {
+      calls: Array.from(callStatsMap.values()).sort((a, b) => b.totalCalls - a.totalCalls),
+      totalActivities: filteredActivities.length,
+      totalCalls,
+      totalEmails,
+      totalTickets,
+      userStats: userStatsMap
+    };
+  }, [filteredActivities]);
 
   // Fetch activities from Supabase
   const fetchActivities = async () => {
@@ -280,24 +342,93 @@ export const ActivityLog: React.FC = () => {
 
 
   return (
-    <div className="container">
-      <h2>Aktivitätslog</h2>
-      
-      {/* Sync Controls */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        marginBottom: '20px',
-        padding: '15px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px'
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f5f7fa',
+      padding: '20px'
+    }}>
+      <div style={{
+        maxWidth: '1400px',
+        margin: '0 auto'
       }}>
-        <div style={{ fontSize: '12px', color: '#666' }}>
-          Letzte Synchronisation: {' '}
+        {/* Header with Back Button */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '30px',
+          backgroundColor: 'white',
+          padding: '20px 30px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+        }}>
+          <h1 style={{
+            margin: 0,
+            fontSize: '28px',
+            fontWeight: '600',
+            color: '#1a202c'
+          }}>Aktivitätslog</h1>
+          
+          <button
+            onClick={handleBackToTimeTracking}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#4299e1',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#3182ce';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(66, 153, 225, 0.3)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#4299e1';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            ← Zurück zur Zeiterfassung
+          </button>
+        </div>
+      
+        {/* Sync Controls */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: '24px',
+          padding: '20px',
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+          transition: 'all 0.3s ease'
+        }}>
+        <div style={{ 
+          fontSize: '14px', 
+          color: '#718096',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}>
+          <span style={{ fontWeight: '500', color: '#4a5568' }}>Letzte Synchronisation:</span>
           {syncStatus.map(status => (
-            <span key={status.source_system} style={{ marginRight: '15px' }}>
-              {status.source_system}: {
+            <span key={status.source_system} style={{ 
+              backgroundColor: '#e6fffa',
+              color: '#047857',
+              padding: '4px 12px',
+              borderRadius: '6px',
+              fontSize: '13px'
+            }}>
+              <strong>{status.source_system}:</strong> {
                 status.last_sync_timestamp 
                   ? new Date(status.last_sync_timestamp).toLocaleString('de-DE')
                   : 'Noch nicht synchronisiert'
@@ -306,31 +437,69 @@ export const ActivityLog: React.FC = () => {
           ))}
         </div>
         
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
             onClick={handleManualSync}
             disabled={syncing}
             style={{
-              padding: '8px 16px',
-              backgroundColor: '#007bff',
+              padding: '10px 20px',
+              backgroundColor: syncing ? '#cbd5e0' : '#48bb78',
               color: 'white',
               border: 'none',
-              borderRadius: '5px',
+              borderRadius: '8px',
+              fontSize: '15px',
+              fontWeight: '500',
               cursor: syncing ? 'not-allowed' : 'pointer',
-              opacity: syncing ? 0.6 : 1
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+            onMouseOver={(e) => {
+              if (!syncing) {
+                e.currentTarget.style.backgroundColor = '#38a169';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(72, 187, 120, 0.3)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!syncing) {
+                e.currentTarget.style.backgroundColor = '#48bb78';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }
             }}
           >
-            {syncing ? 'Synchronisiere...' : 'APIs synchronisieren'}
+            {syncing ? (
+              <>
+                <span style={{
+                  display: 'inline-block',
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid white',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite'
+                }}></span>
+                Synchronisiere...
+              </>
+            ) : (
+              <>
+                🔄 APIs synchronisieren
+              </>
+            )}
           </button>
-          
           
           {backendAvailable === false && (
             <span style={{ 
-              fontSize: '12px', 
-              color: '#dc3545',
-              marginLeft: '10px'
+              fontSize: '14px', 
+              color: '#e53e3e',
+              backgroundColor: '#fed7d7',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontWeight: '500'
             }}>
-              Backend offline
+              ⚠️ Backend offline
             </span>
           )}
         </div>
@@ -339,36 +508,112 @@ export const ActivityLog: React.FC = () => {
       {/* Filters */}
       <div style={{
         display: 'flex',
-        gap: '20px',
-        marginBottom: '20px',
-        padding: '15px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px'
+        gap: '24px',
+        marginBottom: '24px',
+        padding: '20px',
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+        flexWrap: 'wrap'
       }}>
-        <div>
-          <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Datum:</label>
+        <div style={{ flex: '1', minWidth: '180px' }}>
+          <label style={{ 
+            display: 'block',
+            marginBottom: '8px', 
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#4a5568'
+          }}>
+            📅 Von Datum
+          </label>
           <input
             type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
             style={{
-              padding: '5px',
-              borderRadius: '4px',
-              border: '1px solid #ccc'
+              width: '100%',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              fontSize: '15px',
+              transition: 'all 0.2s ease',
+              backgroundColor: '#f7fafc'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#4299e1';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(66, 153, 225, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.boxShadow = 'none';
             }}
           />
         </div>
         
-        <div>
-          <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Telefonnummer:</label>
+        <div style={{ flex: '1', minWidth: '180px' }}>
+          <label style={{ 
+            display: 'block',
+            marginBottom: '8px', 
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#4a5568'
+          }}>
+            📅 Bis Datum
+          </label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              fontSize: '15px',
+              transition: 'all 0.2s ease',
+              backgroundColor: '#f7fafc'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#4299e1';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(66, 153, 225, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          />
+        </div>
+        
+        <div style={{ flex: '2', minWidth: '250px' }}>
+          <label style={{ 
+            display: 'block',
+            marginBottom: '8px', 
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#4a5568'
+          }}>
+            📞 Telefonnummer
+          </label>
           <select
             value={selectedPhone}
             onChange={(e) => setSelectedPhone(e.target.value)}
             style={{
-              padding: '5px',
-              borderRadius: '4px',
-              border: '1px solid #ccc',
-              minWidth: '200px'
+              width: '100%',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              fontSize: '15px',
+              transition: 'all 0.2s ease',
+              backgroundColor: '#f7fafc',
+              cursor: 'pointer'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#4299e1';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(66, 153, 225, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.boxShadow = 'none';
             }}
           >
             <option value="all">Alle Nummern</option>
@@ -381,51 +626,284 @@ export const ActivityLog: React.FC = () => {
         </div>
       </div>
 
-      {/* Statistics */}
-      {statistics.length > 0 && (
+      {/* Extended Statistics Overview */}
+      {extendedStatistics.totalActivities > 0 && (
         <div style={{
-          marginBottom: '20px',
-          padding: '15px',
-          backgroundColor: '#e8f4f8',
-          borderRadius: '8px'
+          marginBottom: '24px',
+          padding: '24px',
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
         }}>
-          <h3 style={{ marginTop: 0 }}>Anrufstatistik {selectedDate ? `für ${formatDate(selectedDate + 'T00:00:00')}` : ''}</h3>
+          <h3 style={{ 
+            marginTop: 0, 
+            marginBottom: '20px',
+            fontSize: '20px',
+            color: '#2d3748',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            📊 Gesamtstatistik für Zeitraum
+          </h3>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '16px',
+            marginBottom: '24px'
+          }}>
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#f7fafc',
+              borderRadius: '8px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4299e1' }}>
+                {extendedStatistics.totalActivities}
+              </div>
+              <div style={{ fontSize: '14px', color: '#718096' }}>Gesamt Aktivitäten</div>
+            </div>
+            
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#f0fff4',
+              borderRadius: '8px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#48bb78' }}>
+                {extendedStatistics.totalCalls}
+              </div>
+              <div style={{ fontSize: '14px', color: '#718096' }}>Anrufe</div>
+            </div>
+            
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#ebf8ff',
+              borderRadius: '8px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3182ce' }}>
+                {extendedStatistics.totalEmails}
+              </div>
+              <div style={{ fontSize: '14px', color: '#718096' }}>E-Mails</div>
+            </div>
+            
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#faf5ff',
+              borderRadius: '8px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#805ad5' }}>
+                {extendedStatistics.totalTickets}
+              </div>
+              <div style={{ fontSize: '14px', color: '#718096' }}>Tickets</div>
+            </div>
+          </div>
+
+          {/* User Activity Summary */}
+          <h4 style={{ 
+            marginTop: '24px',
+            marginBottom: '16px',
+            fontSize: '16px',
+            color: '#2d3748'
+          }}>
+            Aktivitäten nach Teammitglied
+          </h4>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #007bff' }}>
-                  <th style={{ padding: '10px', textAlign: 'left' }}>Teammitglied</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Anrufe gesamt</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Eingehend</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Ausgehend</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Minuten gesamt</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Min. eingehend</th>
-                  <th style={{ padding: '10px', textAlign: 'center' }}>Min. ausgehend</th>
+                <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                  <th style={{ padding: '12px', textAlign: 'left', color: '#4a5568' }}>Teammitglied</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>Anrufe</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>E-Mails</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>Tickets</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>Gesamt</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>Minuten (Anrufe)</th>
                 </tr>
               </thead>
               <tbody>
-                {statistics.map((stat, index) => (
+                {Array.from(extendedStatistics.userStats.values())
+                  .sort((a, b) => (b.calls + b.emails + b.tickets) - (a.calls + a.emails + a.tickets))
+                  .map((userStat, index) => (
+                    <tr key={userStat.name} style={{ 
+                      borderBottom: '1px solid #e2e8f0',
+                      backgroundColor: index % 2 === 0 ? '#f7fafc' : 'white',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.backgroundColor = '#edf2f7';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#f7fafc' : 'white';
+                    }}>
+                      <td style={{ padding: '12px', fontWeight: '500' }}>{userStat.name}</td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>{userStat.calls}</td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>{userStat.emails}</td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>{userStat.tickets}</td>
+                      <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', color: '#4299e1' }}>
+                        {userStat.calls + userStat.emails + userStat.tickets}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', color: '#48bb78' }}>
+                        {Math.round(userStat.totalMinutes)}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Call Statistics */}
+      {extendedStatistics.calls.length > 0 && (
+        <div style={{
+          marginBottom: '24px',
+          padding: '24px',
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+        }}>
+          <h3 style={{ 
+            marginTop: 0,
+            marginBottom: '20px',
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#1a202c',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            📊 Detaillierte Anrufstatistik
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f7fafc' }}>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Teammitglied</th>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Anrufe gesamt</th>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Eingehend</th>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Ausgehend</th>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Minuten gesamt</th>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Min. eingehend</th>
+                  <th style={{ 
+                    padding: '12px 16px', 
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    color: '#4a5568',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}>Min. ausgehend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {extendedStatistics.calls.map((stat, index) => (
                   <tr key={stat.phoneNumber} style={{ 
-                    borderBottom: '1px solid #ddd',
-                    backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white'
+                    borderBottom: '1px solid #e2e8f0',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f7fafc';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
                   }}>
-                    <td style={{ padding: '10px' }}>{stat.phoneNumber}</td>
-                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold' }}>
+                    <td style={{ 
+                      padding: '12px 16px',
+                      fontSize: '15px',
+                      color: '#2d3748'
+                    }}>{stat.phoneNumber}</td>
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      textAlign: 'center', 
+                      fontWeight: '600',
+                      fontSize: '15px',
+                      color: '#4299e1'
+                    }}>
                       {stat.totalCalls}
                     </td>
-                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      textAlign: 'center',
+                      fontSize: '15px',
+                      color: '#2d3748'
+                    }}>
                       {stat.inboundCalls}
                     </td>
-                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      textAlign: 'center',
+                      fontSize: '15px',
+                      color: '#2d3748'
+                    }}>
                       {stat.outboundCalls}
                     </td>
-                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold' }}>
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      textAlign: 'center', 
+                      fontWeight: '600',
+                      fontSize: '15px',
+                      color: '#48bb78'
+                    }}>
                       {Math.round(stat.totalMinutes)}
                     </td>
-                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      textAlign: 'center',
+                      fontSize: '15px',
+                      color: '#2d3748'
+                    }}>
                       {Math.round(stat.inboundMinutes)}
                     </td>
-                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      textAlign: 'center',
+                      fontSize: '15px',
+                      color: '#2d3748'
+                    }}>
                       {Math.round(stat.outboundMinutes)}
                     </td>
                   </tr>
@@ -437,75 +915,122 @@ export const ActivityLog: React.FC = () => {
       )}
 
       {/* Activities List */}
-      <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+      <div style={{ 
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+        padding: '24px',
+        maxHeight: '70vh',
+        overflowY: 'auto'
+      }}>
         {Object.entries(groupedActivities).map(([date, dateActivities]) => (
-          <div key={date} style={{ marginBottom: '30px' }}>
-            <h3 style={{ borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>
-              {date}
+          <div key={date} style={{ marginBottom: '32px' }}>
+            <h3 style={{ 
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#2d3748',
+              marginBottom: '16px',
+              paddingBottom: '8px',
+              borderBottom: '2px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              📅 {date}
             </h3>
-            {dateActivities.map(activity => (
-              <div 
-                key={activity.id}
-                onClick={() => setSelectedActivity(activity)}
-                className="activity-item"
-                style={{
-                  padding: '12px',
-                  marginBottom: '8px',
-                  backgroundColor: '#f9f9f9',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  border: '1px solid #eee',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '20px' }}>
-                      {getActivityIcon(activity.activity_type, activity.direction)}
-                    </span>
-                    <span style={{ fontWeight: 'bold' }}>
-                      {formatTime(activity.timestamp)}
-                    </span>
-                    <span>-</span>
-                    <span>{getActivityDescription(activity)}</span>
-                    {activity.user_name && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {dateActivities.map(activity => (
+                <div 
+                  key={activity.id}
+                  onClick={() => setSelectedActivity(activity)}
+                  style={{
+                    padding: '16px',
+                    backgroundColor: '#f7fafc',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    border: '1px solid #e2e8f0',
+                    transition: 'all 0.2s ease',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#edf2f7';
+                    e.currentTarget.style.borderColor = '#cbd5e0';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f7fafc';
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '24px' }}>
+                        {getActivityIcon(activity.activity_type, activity.direction)}
+                      </span>
                       <span style={{ 
-                        backgroundColor: '#007bff',
-                        color: 'white',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '12px'
+                        fontWeight: '600',
+                        fontSize: '16px',
+                        color: '#2d3748'
                       }}>
-                        {activity.user_name}
+                        {formatTime(activity.timestamp)}
                       </span>
-                    )}
-                  </div>
-                  
-                  <div style={{ paddingLeft: '30px', fontSize: '14px', color: '#666' }}>
-                    {activity.contact_name && (
-                      <span style={{ marginRight: '15px' }}>
-                        <strong>Kontakt:</strong> {activity.contact_name}
-                      </span>
-                    )}
-                    {activity.contact_phone && (
-                      <span style={{ marginRight: '15px' }}>
-                        <strong>Tel:</strong> {activity.contact_phone}
-                      </span>
-                    )}
-                    {activity.contact_email && (
-                      <span style={{ marginRight: '15px' }}>
-                        <strong>Email:</strong> {activity.contact_email}
-                      </span>
-                    )}
-                    {activity.subject && (
-                      <span>
-                        <strong>Betreff:</strong> {activity.subject}
-                      </span>
-                    )}
+                      <span style={{ color: '#718096' }}>•</span>
+                      <span style={{
+                        fontSize: '15px',
+                        color: '#4a5568'
+                      }}>{getActivityDescription(activity)}</span>
+                      {activity.user_name && (
+                        <span style={{ 
+                          backgroundColor: '#4299e1',
+                          color: 'white',
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          marginLeft: 'auto'
+                        }}>
+                          {activity.user_name}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div style={{ 
+                      paddingLeft: '36px', 
+                      fontSize: '14px', 
+                      color: '#718096',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '20px'
+                    }}>
+                      {activity.contact_name && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <strong style={{ color: '#4a5568' }}>👤 Kontakt:</strong> {activity.contact_name}
+                        </span>
+                      )}
+                      {activity.contact_phone && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <strong style={{ color: '#4a5568' }}>📞 Tel:</strong> {activity.contact_phone}
+                        </span>
+                      )}
+                      {activity.contact_email && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <strong style={{ color: '#4a5568' }}>✉️ Email:</strong> {activity.contact_email}
+                        </span>
+                      )}
+                      {activity.subject && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <strong style={{ color: '#4a5568' }}>📋 Betreff:</strong> {activity.subject}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -519,83 +1044,120 @@ export const ActivityLog: React.FC = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: 'rgba(0,0,0,0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000
+            zIndex: 1000,
+            backdropFilter: 'blur(4px)'
           }}
           onClick={() => setSelectedActivity(null)}
         >
           <div 
             style={{
               backgroundColor: 'white',
-              padding: '20px',
-              borderRadius: '10px',
+              padding: '32px',
+              borderRadius: '16px',
               maxWidth: '600px',
               width: '90%',
               maxHeight: '80vh',
-              overflow: 'auto'
+              overflow: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              animation: 'modalFadeIn 0.2s ease-out'
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3>Aktivitätsdetails</h3>
-            <table style={{ width: '100%' }}>
-              <tbody>
-                <tr>
-                  <td><strong>Typ:</strong></td>
-                  <td>{selectedActivity.activity_type}</td>
-                </tr>
-                <tr>
-                  <td><strong>Zeit:</strong></td>
-                  <td>{new Date(selectedActivity.timestamp).toLocaleString('de-DE')}</td>
-                </tr>
+            <h3 style={{
+              marginTop: 0,
+              marginBottom: '24px',
+              fontSize: '24px',
+              fontWeight: '600',
+              color: '#1a202c',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '28px' }}>
+                {getActivityIcon(selectedActivity.activity_type, selectedActivity.direction)}
+              </span>
+              Aktivitätsdetails
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '140px 1fr',
+                gap: '12px',
+                alignItems: 'start',
+                padding: '16px',
+                backgroundColor: '#f7fafc',
+                borderRadius: '8px'
+              }}>
+                <span style={{ fontWeight: '600', color: '#4a5568' }}>Typ:</span>
+                <span style={{ color: '#2d3748' }}>{selectedActivity.activity_type}</span>
+                
+                <span style={{ fontWeight: '600', color: '#4a5568' }}>Zeit:</span>
+                <span style={{ color: '#2d3748' }}>{new Date(selectedActivity.timestamp).toLocaleString('de-DE')}</span>
+                
                 {selectedActivity.duration_seconds && (
-                  <tr>
-                    <td><strong>Dauer:</strong></td>
-                    <td>{formatDuration(selectedActivity.duration_seconds)}</td>
-                  </tr>
+                  <>
+                    <span style={{ fontWeight: '600', color: '#4a5568' }}>Dauer:</span>
+                    <span style={{ color: '#2d3748' }}>{formatDuration(selectedActivity.duration_seconds)}</span>
+                  </>
                 )}
-                <tr>
-                  <td><strong>Richtung:</strong></td>
-                  <td>{selectedActivity.direction || 'N/A'}</td>
-                </tr>
-                <tr>
-                  <td><strong>Kontakt:</strong></td>
-                  <td>
-                    {selectedActivity.contact_name && <div>{selectedActivity.contact_name}</div>}
-                    {selectedActivity.contact_email && <div>{selectedActivity.contact_email}</div>}
-                    {selectedActivity.contact_phone && <div>{selectedActivity.contact_phone}</div>}
-                  </td>
-                </tr>
-                <tr>
-                  <td><strong>Bearbeiter:</strong></td>
-                  <td>{selectedActivity.user_name || selectedActivity.user_email || 'Unbekannt'}</td>
-                </tr>
+                
+                <span style={{ fontWeight: '600', color: '#4a5568' }}>Richtung:</span>
+                <span style={{ color: '#2d3748' }}>{selectedActivity.direction || 'N/A'}</span>
+                
+                <span style={{ fontWeight: '600', color: '#4a5568' }}>Kontakt:</span>
+                <div style={{ color: '#2d3748' }}>
+                  {selectedActivity.contact_name && <div>{selectedActivity.contact_name}</div>}
+                  {selectedActivity.contact_email && <div>{selectedActivity.contact_email}</div>}
+                  {selectedActivity.contact_phone && <div>{selectedActivity.contact_phone}</div>}
+                  {!selectedActivity.contact_name && !selectedActivity.contact_email && !selectedActivity.contact_phone && <div>-</div>}
+                </div>
+                
+                <span style={{ fontWeight: '600', color: '#4a5568' }}>Bearbeiter:</span>
+                <span style={{ color: '#2d3748' }}>{selectedActivity.user_name || selectedActivity.user_email || 'Unbekannt'}</span>
+                
                 {selectedActivity.subject && (
-                  <tr>
-                    <td><strong>Betreff:</strong></td>
-                    <td>{selectedActivity.subject}</td>
-                  </tr>
+                  <>
+                    <span style={{ fontWeight: '600', color: '#4a5568' }}>Betreff:</span>
+                    <span style={{ color: '#2d3748' }}>{selectedActivity.subject}</span>
+                  </>
                 )}
+                
                 {selectedActivity.preview && (
-                  <tr>
-                    <td><strong>Vorschau:</strong></td>
-                    <td>{selectedActivity.preview}</td>
-                  </tr>
+                  <>
+                    <span style={{ fontWeight: '600', color: '#4a5568' }}>Vorschau:</span>
+                    <span style={{ color: '#2d3748' }}>{selectedActivity.preview}</span>
+                  </>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
             <button 
               onClick={() => setSelectedActivity(null)}
               style={{
-                marginTop: '20px',
-                padding: '10px 20px',
-                backgroundColor: '#007bff',
+                marginTop: '24px',
+                padding: '12px 24px',
+                backgroundColor: '#4299e1',
                 color: 'white',
                 border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                width: '100%'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#3182ce';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(66, 153, 225, 0.3)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#4299e1';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
               }}
             >
               Schließen
@@ -603,6 +1165,7 @@ export const ActivityLog: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

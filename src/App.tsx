@@ -138,7 +138,11 @@ function App() {
   if (currentUser.role === 'admin') {
     // Check if activity log route is requested
     if (window.location.pathname === '/admin/activity-log') {
-      return <ActivityLog />;
+      return (
+        <div>
+          <ActivityLog />
+        </div>
+      );
     }
     return <AdminDashboard user={currentUser} onLogout={handleLogout} />;
   }
