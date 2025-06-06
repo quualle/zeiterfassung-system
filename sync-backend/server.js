@@ -366,11 +366,15 @@ async function syncAircallCalls() {
     let skippedCount = 0;
     
     // Filter for specific phone numbers (Marco, Ines, and local numbers)
+    // Store without any formatting for comparison
     const allowedNumbers = [
-      '+4915735999713',    // Marco mobil
-      '+49303149420347',   // Marco Festnetz
-      '+49303149420357',   // Ines Festnetz  
-      '+4991815473001'     // lokal
+      '4915735999713',     // Marco mobil (original)
+      '4915735999441',     // Possible Marco mobil (8 calls in logs)
+      '4915735999738',     // Possible team mobil (5 calls)
+      '4915735999481',     // Possible team mobil (4 calls)
+      '49303149420347',    // Marco Festnetz
+      '49303149420357',    // Ines Festnetz  
+      '4991815473001'      // lokal
     ];
     
     console.log(`Processing ${calls.length} calls from Aircall...`);
@@ -406,14 +410,14 @@ async function syncAircallCalls() {
       // Filter by phone numbers - check both from and to numbers
       const callNumbers = [call.from, call.to, call.raw_digits, call.number?.digits].filter(Boolean);
       
-      // Normalize numbers for comparison (remove spaces and +)
-      const normalizeNumber = (num) => num ? num.replace(/[\s+]/g, '') : '';
+      // Normalize numbers for comparison (remove all non-digits)
+      const normalizeNumber = (num) => num ? num.replace(/\D/g, '') : '';
       
       const isRelevantCall = callNumbers.some(num => {
         const normalizedNum = normalizeNumber(num);
         return allowedNumbers.some(allowed => {
-          const normalizedAllowed = normalizeNumber(allowed);
-          return normalizedNum.includes(normalizedAllowed) || normalizedAllowed.includes(normalizedNum);
+          // Check if the number contains our allowed number
+          return normalizedNum.includes(allowed);
         });
       });
       
