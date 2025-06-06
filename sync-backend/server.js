@@ -332,11 +332,11 @@ async function syncAircallCalls() {
         password: apiToken
       },
       params: {
-        per_page: 200,  // Further increased to get more calls since we're filtering
+        per_page: 2000,  // Maximum to get all calls since we're filtering heavily
         order: 'desc',
         from: thirtyDaysAgo  // Only get calls from last 30 days
       },
-      timeout: 10000, // 10 second timeout
+      timeout: 30000, // 30 second timeout for large requests
       validateStatus: function (status) {
         return status < 500; // Don't throw on 4xx errors
       }
