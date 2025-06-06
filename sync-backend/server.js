@@ -368,10 +368,7 @@ async function syncAircallCalls() {
     // Filter for specific phone numbers (Marco, Ines, and local numbers)
     // Store without any formatting for comparison
     const allowedNumbers = [
-      '4915735999713',     // Marco mobil (original)
-      '4915735999441',     // Possible Marco mobil (8 calls in logs)
-      '4915735999738',     // Possible team mobil (5 calls)
-      '4915735999481',     // Possible team mobil (4 calls)
+      '4915735999713',     // Marco mobil
       '49303149420347',    // Marco Festnetz
       '49303149420357',    // Ines Festnetz  
       '4991815473001'      // lokal
