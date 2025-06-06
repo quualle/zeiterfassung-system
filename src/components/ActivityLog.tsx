@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { createSampleActivities } from '../utils/activitySync';
+import { importManualData, generateRealisticActivities } from '../utils/manualDataImport';
 import '../App.css';
 
 interface Activity {
@@ -31,6 +32,7 @@ export const ActivityLog: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // Fetch activities from Supabase
   const fetchActivities = async () => {
@@ -168,22 +170,106 @@ export const ActivityLog: React.FC = () => {
     );
   }
 
+  // Manual sync function
+  const handleManualSync = async () => {
+    setSyncing(true);
+    setError(null);
+    
+    try {
+      const result = await importManualData();
+      if (result.success) {
+        await fetchActivities();
+        await fetchSyncStatus();
+      } else {
+        setError(result.message);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Generate realistic data
+  const handleGenerateData = async () => {
+    setSyncing(true);
+    setError(null);
+    
+    try {
+      const result = await generateRealisticActivities();
+      if (result.success) {
+        await fetchActivities();
+        await fetchSyncStatus();
+      } else {
+        setError(result.message);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="container">
       <h2>Aktivitätslog</h2>
       
-      {/* Sync Status */}
-      <div style={{ marginBottom: '20px', fontSize: '12px', color: '#666' }}>
-        Letzte Synchronisation: {' '}
-        {syncStatus.map(status => (
-          <span key={status.source_system} style={{ marginRight: '15px' }}>
-            {status.source_system}: {
-              status.last_sync_timestamp 
-                ? new Date(status.last_sync_timestamp).toLocaleString('de-DE')
-                : 'Noch nicht synchronisiert'
-            }
-          </span>
-        ))}
+      {/* Sync Controls */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '20px',
+        padding: '15px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px'
+      }}>
+        <div style={{ fontSize: '12px', color: '#666' }}>
+          Letzte Synchronisation: {' '}
+          {syncStatus.map(status => (
+            <span key={status.source_system} style={{ marginRight: '15px' }}>
+              {status.source_system}: {
+                status.last_sync_timestamp 
+                  ? new Date(status.last_sync_timestamp).toLocaleString('de-DE')
+                  : 'Noch nicht synchronisiert'
+              }
+            </span>
+          ))}
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={handleManualSync}
+            disabled={syncing}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: syncing ? 'not-allowed' : 'pointer',
+              opacity: syncing ? 0.6 : 1
+            }}
+          >
+            {syncing ? 'Synchronisiere...' : 'Daten aktualisieren'}
+          </button>
+          
+          <button
+            onClick={handleGenerateData}
+            disabled={syncing}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: syncing ? 'not-allowed' : 'pointer',
+              opacity: syncing ? 0.6 : 1
+            }}
+          >
+            30 Tage Testdaten
+          </button>
+        </div>
       </div>
 
       {/* Activities List */}
