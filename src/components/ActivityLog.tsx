@@ -104,8 +104,42 @@ export const ActivityLog: React.FC = () => {
     let totalEmails = 0;
     let totalTickets = 0;
     
+    // Name normalization function to consolidate different variations of the same person
+    const normalizeUserName = (name: string | null, email: string | null): string => {
+      // Handle null/undefined cases
+      if (!name && !email) return 'Unknown';
+      
+      const nameOrEmail = name || email || '';
+      
+      // Map email addresses and name variations to canonical names
+      const nameMapping: { [key: string]: string } = {
+        'pflegeteam.heer@pflegehilfe-senioren.de': 'Pflegeteam Heer',
+        'Pflegeteam Heer': 'Pflegeteam Heer',
+        'Ines Cürten': 'Ines Cürten',
+        'I. Cürten I Pflegehilfe für Senioren': 'Ines Cürten',
+        'Unknown': 'Unknown'
+      };
+      
+      // Check if we have a direct mapping
+      if (nameMapping[nameOrEmail]) {
+        return nameMapping[nameOrEmail];
+      }
+      
+      // Try to identify from email if it's an unknown name
+      if (nameOrEmail === 'Unknown' && email) {
+        // Check if email matches known patterns
+        if (email === 'pflegeteam.heer@pflegehilfe-senioren.de') {
+          return 'Pflegeteam Heer';
+        }
+        // Add more email pattern matching here if needed
+      }
+      
+      // Return the original name if no mapping found
+      return nameOrEmail;
+    };
+    
     filteredActivities.forEach(activity => {
-      const userName = activity.user_name || activity.user_email || 'Unknown';
+      const userName = normalizeUserName(activity.user_name, activity.user_email);
       
       // Initialize user stats if not exists
       if (!userStatsMap.has(userName)) {
