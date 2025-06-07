@@ -5,6 +5,8 @@ const { createClient } = require('@supabase/supabase-js');
 const { BigQuery } = require('@google-cloud/bigquery');
 const axios = require('axios');
 const moment = require('moment-timezone');
+const { google } = require('googleapis');
+const crypto = require('crypto');
 
 // Set default timezone to Europe/Berlin
 moment.tz.setDefault('Europe/Berlin');
@@ -81,9 +83,87 @@ const bigquery = new BigQuery({
   credentials: JSON.parse(process.env.BIGQUERY_CREDENTIALS || '{}')
 });
 
+// Initialize Gmail OAuth2 client
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GMAIL_CLIENT_ID,
+  process.env.GMAIL_CLIENT_SECRET,
+  process.env.GMAIL_REDIRECT_URI || 'https://zeiterfassung-sync-backend.onrender.com/auth/gmail/callback'
+);
+
+// Set credentials if we have a refresh token stored
+if (process.env.GMAIL_REFRESH_TOKEN) {
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GMAIL_REFRESH_TOKEN
+  });
+}
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Sync backend is running' });
+});
+
+// Gmail OAuth2 endpoints
+app.get('/auth/gmail', (req, res) => {
+  // Generate state for CSRF protection
+  const state = crypto.randomBytes(32).toString('hex');
+  
+  // Store state in session or as environment variable temporarily
+  // In production, use proper session management
+  
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.metadata'
+    ],
+    state: state,
+    prompt: 'consent' // Force consent to get refresh token
+  });
+  
+  res.redirect(authUrl);
+});
+
+app.get('/auth/gmail/callback', async (req, res) => {
+  const { code, state } = req.query;
+  
+  if (!code) {
+    return res.status(400).send('Authorization code missing');
+  }
+  
+  try {
+    // Exchange code for tokens
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+    
+    // Store refresh token
+    if (tokens.refresh_token) {
+      console.log('Received refresh token, please add to environment variables:');
+      console.log('GMAIL_REFRESH_TOKEN=' + tokens.refresh_token);
+      
+      // In production, store this securely
+      process.env.GMAIL_REFRESH_TOKEN = tokens.refresh_token;
+    }
+    
+    res.send(`
+      <html>
+        <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+          <h1 style="color: #28a745;">✅ Gmail Authorization Successful!</h1>
+          <p>Die Gmail-Verbindung wurde erfolgreich hergestellt.</p>
+          <p>Der Refresh Token wurde in der Konsole ausgegeben.</p>
+          <p>Bitte fügen Sie ihn zu den Umgebungsvariablen in Render.com hinzu.</p>
+          <p style="margin-top: 30px;">
+            <a href="https://zeiterfassung-system.netlify.app/admin/activity-log" 
+               style="background: #4299e1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+              Zurück zum Activity Log
+            </a>
+          </p>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Error exchanging code for token:', error);
+    res.status(500).send('Authorization failed: ' + error.message);
+  }
 });
 
 // Debug endpoint to check recent activities and their timestamps
@@ -503,15 +583,131 @@ async function syncAircallCalls() {
   }
 }
 
-// Gmail sync function (requires OAuth setup)
+// Gmail sync function with OAuth2
 async function syncGmailEmails() {
   console.log('Syncing Gmail emails...');
   
   try {
-    // OAuth not yet implemented - return 0 activities
-    // In production, implement proper OAuth2 flow here
-    // When implemented, ensure timestamps are converted like this:
-    // timestamp: convertToUTC(emailTimestamp, 'iso')
+    // Check if we have credentials
+    if (!process.env.GMAIL_REFRESH_TOKEN) {
+      console.log('Gmail refresh token not configured');
+      return { 
+        success: false, 
+        count: 0, 
+        message: 'Gmail OAuth not configured. Visit /auth/gmail to authorize.' 
+      };
+    }
+    
+    // Create Gmail API instance
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    // Calculate date 30 days ago
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const dateQuery = `after:${Math.floor(thirtyDaysAgo.getTime() / 1000)}`;
+    
+    // Search for sent emails from the team
+    const teamEmails = [
+      'pflegeteam.heer@pflegehilfe-senioren.de',
+      'ines.cuerten@pflegehilfe-senioren.de'
+    ];
+    
+    let allMessages = [];
+    let syncedCount = 0;
+    
+    for (const email of teamEmails) {
+      console.log(`Fetching sent emails for ${email}...`);
+      
+      try {
+        // List messages
+        const response = await gmail.users.messages.list({
+          userId: 'me',
+          q: `from:${email} in:sent ${dateQuery}`,
+          maxResults: 100
+        });
+        
+        const messages = response.data.messages || [];
+        console.log(`Found ${messages.length} sent emails for ${email}`);
+        
+        // Fetch details for each message
+        for (const message of messages) {
+          try {
+            const details = await gmail.users.messages.get({
+              userId: 'me',
+              id: message.id,
+              format: 'metadata',
+              metadataHeaders: ['From', 'To', 'Subject', 'Date']
+            });
+            
+            const headers = details.data.payload.headers || [];
+            const getHeader = (name) => headers.find(h => h.name === name)?.value || '';
+            
+            const fromHeader = getHeader('From');
+            const toHeader = getHeader('To');
+            const subject = getHeader('Subject');
+            const dateStr = getHeader('Date');
+            
+            // Parse email addresses
+            const fromMatch = fromHeader.match(/<(.+?)>/) || [null, fromHeader];
+            const toMatch = toHeader.match(/<(.+?)>/) || [null, toHeader];
+            const fromEmail = fromMatch[1];
+            const toEmail = toMatch[1];
+            
+            // Parse sender name
+            const fromName = fromHeader.split('<')[0].trim().replace(/"/g, '') || fromEmail;
+            const toName = toHeader.split('<')[0].trim().replace(/"/g, '') || toEmail;
+            
+            // Convert date to UTC
+            const timestamp = convertToUTC(new Date(dateStr).toISOString(), 'iso');
+            logTimestampConversion('Gmail', dateStr, timestamp);
+            
+            // Get snippet as preview
+            const preview = details.data.snippet || '';
+            
+            // Upsert to database
+            const { error } = await supabase.from('activities').upsert({
+              source_system: 'gmail',
+              source_id: `gmail_${message.id}`,
+              activity_type: 'email',
+              direction: 'outbound', // We're only fetching sent emails
+              timestamp: timestamp,
+              subject: subject,
+              preview: preview.substring(0, 200),
+              contact_name: toName,
+              contact_email: toEmail,
+              user_name: fromName,
+              user_email: fromEmail,
+              raw_data: {
+                id: message.id,
+                threadId: message.threadId,
+                headers: headers
+              }
+            }, {
+              onConflict: 'source_system,source_id',
+            });
+            
+            if (!error) {
+              syncedCount++;
+            } else {
+              console.error('Error inserting email:', error);
+            }
+            
+            // Small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+          } catch (err) {
+            console.error(`Error fetching message ${message.id}:`, err);
+          }
+        }
+      } catch (err) {
+        console.error(`Error listing messages for ${email}:`, err);
+        // If it's an auth error, clear the refresh token
+        if (err.code === 401 || err.message?.includes('invalid_grant')) {
+          console.error('Gmail authentication failed. Refresh token may be invalid.');
+          throw new Error('Gmail authentication failed. Please re-authorize at /auth/gmail');
+        }
+      }
+    }
     
     await supabase
       .from('sync_status')
@@ -519,11 +715,13 @@ async function syncGmailEmails() {
         last_sync_timestamp: moment.tz('Europe/Berlin').toISOString(),
         last_successful_sync: moment.tz('Europe/Berlin').toISOString(),
         sync_status: 'success',
-        error_message: 'OAuth not configured - no data synced',
+        error_message: null,
       })
       .eq('source_system', 'gmail');
 
-    return { success: true, count: 0, message: 'Gmail OAuth not configured' };
+    console.log(`Gmail sync complete: ${syncedCount} emails synced`);
+    return { success: true, count: syncedCount, message: `${syncedCount} E-Mails synchronisiert` };
+    
   } catch (error) {
     console.error('Gmail sync error:', error);
     
@@ -552,4 +750,7 @@ app.listen(PORT, () => {
   console.log('- Supabase Key:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Set' : 'Missing');
   console.log('- BigQuery Credentials:', process.env.BIGQUERY_CREDENTIALS ? 'Set' : 'Missing');
   console.log('- Aircall API Key:', process.env.AIRCALL_API_KEY ? 'Set' : 'Missing');
+  console.log('- Gmail Client ID:', process.env.GMAIL_CLIENT_ID ? 'Set' : 'Missing');
+  console.log('- Gmail Client Secret:', process.env.GMAIL_CLIENT_SECRET ? 'Set' : 'Missing');
+  console.log('- Gmail Refresh Token:', process.env.GMAIL_REFRESH_TOKEN ? 'Set' : 'Missing');
 });
