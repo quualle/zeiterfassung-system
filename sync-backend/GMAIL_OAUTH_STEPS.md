@@ -38,12 +38,18 @@ Nach dem Hinzufügen der Environment Variables:
 
 ## 5. Gmail autorisieren
 
+**WICHTIG**: Du musst dich mit dem Account anmelden, dessen E-Mails synchronisiert werden sollen!
+
 1. Öffne im Browser: https://zeiterfassung-sync-backend.onrender.com/auth/gmail
-2. Melde dich mit dem Google Account an (pflegeteam.heer@pflegehilfe-senioren.de)
-3. Erlaube den Zugriff auf Gmail
+2. Melde dich mit einem der Team-Accounts an:
+   - pflegeteam.heer@pflegehilfe-senioren.de
+   - ines.cuerten@pflegehilfe-senioren.de
+3. Erlaube den Zugriff auf Gmail ("Gmail lesen")
 4. Nach erfolgreicher Autorisierung siehst du eine Bestätigungsseite
 5. **WICHTIG**: Schaue in die Render.com Logs - dort wird der Refresh Token angezeigt
 6. Kopiere den Refresh Token aus den Logs
+
+**Hinweis**: Die App kann nur E-Mails des autorisierten Accounts lesen. Für mehrere Accounts müsstest du Google Workspace Domain-Wide Delegation einrichten.
 
 ## 6. Refresh Token speichern
 
@@ -72,4 +78,10 @@ GMAIL_REFRESH_TOKEN=der_kopierte_refresh_token
 
 ### Keine E-Mails werden angezeigt
 - Prüfe ob E-Mails in den letzten 30 Tagen gesendet wurden
+- Stelle sicher, dass du mit dem richtigen Account autorisiert hast
+- Die App kann nur E-Mails des autorisierten Accounts lesen
 - Schaue in die Render.com Logs für Fehlermeldungen
+
+### "Metadata scope does not support 'q' parameter"
+- Der OAuth Scope wurde geändert
+- Führe die Autorisierung erneut durch (Schritt 5)

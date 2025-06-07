@@ -113,8 +113,7 @@ app.get('/auth/gmail', (req, res) => {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.metadata'
+      'https://www.googleapis.com/auth/gmail.readonly'
     ],
     state: state,
     prompt: 'consent' // Force consent to get refresh token
@@ -619,10 +618,14 @@ async function syncGmailEmails() {
       console.log(`Fetching sent emails for ${email}...`);
       
       try {
-        // List messages
+        // List messages - adjust query based on current user
+        // For team emails, we need to check if we're authenticated as that user
+        // or if we have delegation access
+        const query = `in:sent ${dateQuery}`;
+        
         const response = await gmail.users.messages.list({
           userId: 'me',
-          q: `from:${email} in:sent ${dateQuery}`,
+          q: query,
           maxResults: 100
         });
         
@@ -650,12 +653,17 @@ async function syncGmailEmails() {
             // Parse email addresses
             const fromMatch = fromHeader.match(/<(.+?)>/) || [null, fromHeader];
             const toMatch = toHeader.match(/<(.+?)>/) || [null, toHeader];
-            const fromEmail = fromMatch[1];
-            const toEmail = toMatch[1];
+            const fromEmail = fromMatch[1] || fromHeader;
+            const toEmail = toMatch[1] || toHeader;
             
             // Parse sender name
             const fromName = fromHeader.split('<')[0].trim().replace(/"/g, '') || fromEmail;
             const toName = toHeader.split('<')[0].trim().replace(/"/g, '') || toEmail;
+            
+            // Only sync emails from our team members
+            if (!teamEmails.includes(fromEmail.toLowerCase())) {
+              continue;
+            }
             
             // Convert date to UTC
             const timestamp = convertToUTC(new Date(dateStr).toISOString(), 'iso');
