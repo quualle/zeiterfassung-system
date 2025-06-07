@@ -1,0 +1,62 @@
+ZEITERFASSUNG-SYSTEM - PROJEKTÜBERSICHT
+=======================================
+
+WAS WIR GEBAUT HABEN:
+- Zeiterfassungssystem für Pflegeteam mit PIN-basiertem Login
+- Admin-Dashboard mit Mitarbeiterverwaltung
+- Aktivitätslog für Kommunikation (Anrufe, E-Mails, Tickets)
+- Arbeitszeit-Regeln mit automatischem Ausloggen
+- Änderungsanträge für nachträgliche Zeitkorrekturen
+
+TECH-STACK & SERVICES:
+- Frontend: React + TypeScript
+- Datenbank: Supabase (PostgreSQL)
+- Backend: Node.js/Express (für API-Integrationen)
+- Hosting Frontend: Netlify (zeiterfassung-system.netlify.app)
+- Hosting Backend: Render.com (zeiterfassung-sync-backend)
+- APIs: BigQuery (Tickets), Aircall (Anrufe), Gmail (E-Mails)
+
+WICHTIGE DATEIEN:
+- sync-backend/server.js - Backend für API-Synchronisation
+- src/components/ActivityLog.tsx - Aktivitätslog UI
+- src/lib/supabase.ts - Datenbankverbindung
+- sync-backend/GMAIL_OAUTH_STEPS.md - Gmail Setup-Anleitung
+
+GELÖSTE PROBLEME:
+1. BigQuery STRING statt TIMESTAMP - gelöst mit String-Datumsformat
+2. Aircall Auth mit API ID:Token Format statt Bearer Token
+3. Timezone-Problem (14:20 vs 16:20) - moment-timezone eingebaut
+4. Session-Persistenz für Admins - localStorage implementiert
+5. Gmail OAuth "metadata scope" Fehler - nur gmail.readonly verwenden
+6. Doppelte Namen in Statistik - Namenskonsolidierung eingebaut
+
+HINZUGEFÜGTE FEATURES:
+- Echtzeit-Synchronisation von BigQuery, Aircall, Gmail
+- Filterung nach Telefonnummern (Marco, Ines, lokal)
+- Datumsbereich-Filter (von-bis)
+- Erweiterte Statistiken für alle Aktivitätstypen
+- Automatisches Ausloggen basierend auf Arbeitszeit-Regeln
+- Backend-Service für API-Integration ohne CORS-Probleme
+
+UMGEBUNGSVARIABLEN (Render.com):
+- SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+- BIGQUERY_CREDENTIALS (JSON String)
+- AIRCALL_API_KEY (Format: apiId:apiToken)
+- GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
+
+WICHTIGE ACCOUNTS:
+- Supabase: dein Projekt
+- GitHub: quualle/zeiterfassung-system
+- Render.com: sync-backend Service
+- Google Cloud: gcpxbixpflegehilfesenioren Projekt
+
+NÄCHSTE SCHRITTE BEI WIEDEREINSTIEG:
+1. git pull (neueste Änderungen holen)
+2. npm install (Dependencies installieren)
+3. npm start (lokaler Dev-Server)
+4. Render.com Dashboard für Backend-Logs prüfen
+5. Supabase Dashboard für Datenbank-Zugriff
+
+OFFENE PUNKTE:
+- Gmail zeigt nur E-Mails des autorisierten Accounts
+- Für Multi-Account Gmail bräuchte man Google Workspace Domain Delegation
