@@ -215,17 +215,50 @@ export const ActivityLog: React.FC = () => {
     };
   }, [filteredActivities]);
 
-  // Fetch activities from Supabase
+  // Fetch activities from Supabase with blacklist filtering
   const fetchActivities = async () => {
     try {
-      const { data, error } = await supabase
+      // First fetch all activities
+      const { data: activities, error: activitiesError } = await supabase
         .from('activities')
         .select('*')
         .order('timestamp', { ascending: false })
         .limit(500);
 
-      if (error) throw error;
-      setActivities(data || []);
+      if (activitiesError) throw activitiesError;
+      
+      // Then fetch blacklisted emails
+      const { data: blacklist, error: blacklistError } = await supabase
+        .from('email_blacklist')
+        .select('email')
+        .eq('is_active', true);
+      
+      if (blacklistError) {
+        console.error('Error fetching blacklist:', blacklistError);
+        setActivities(activities || []);
+        return;
+      }
+      
+      // Create a set of blacklisted emails for faster lookup
+      const blacklistedEmails = new Set(
+        (blacklist || []).map(item => item.email.toLowerCase())
+      );
+      
+      // Filter out activities with blacklisted emails
+      const filteredActivities = (activities || []).filter(activity => {
+        // Check if contact email is blacklisted
+        if (activity.contact_email && blacklistedEmails.has(activity.contact_email.toLowerCase())) {
+          return false;
+        }
+        // For email activities, also check user email (sender)
+        if (activity.activity_type === 'email' && activity.user_email && 
+            blacklistedEmails.has(activity.user_email.toLowerCase())) {
+          return false;
+        }
+        return true;
+      });
+      
+      setActivities(filteredActivities);
     } catch (err: any) {
       console.error('Error fetching activities:', err);
       setError(err.message);

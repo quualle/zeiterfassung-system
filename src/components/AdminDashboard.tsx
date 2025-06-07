@@ -4,6 +4,7 @@ import { getUsers, getTimeEntries, getChangeRequests, processChangeRequest, getN
 import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 import { TimeTracking } from './TimeTracking';
 import { WorkTimeRules } from './WorkTimeRules';
+import { EmailBlacklist } from './EmailBlacklist';
 
 interface AdminDashboardProps {
   user: User;
@@ -17,7 +18,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules' | 'blacklist'>('overview');
 
   useEffect(() => {
     const loadData = async () => {
@@ -137,6 +138,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             onClick={() => setActiveTab('worktimerules')}
           >
             Arbeitszeiten
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'blacklist' ? 'active' : ''}`}
+            onClick={() => setActiveTab('blacklist')}
+          >
+            E-Mail Blacklist
           </button>
           <button 
             className="tab-button"
@@ -428,6 +435,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         ) : activeTab === 'worktimerules' ? (
           /* Arbeitszeitregeln */
           <WorkTimeRules users={users} />
+        ) : activeTab === 'blacklist' ? (
+          /* E-Mail Blacklist */
+          <EmailBlacklist />
         ) : null}
       </main>
     </div>

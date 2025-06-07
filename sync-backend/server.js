@@ -582,6 +582,20 @@ async function syncAircallCalls() {
   }
 }
 
+// Helper function to check if email is blacklisted
+async function isEmailBlacklisted(email) {
+  if (!email) return false;
+  
+  const { data, error } = await supabase
+    .from('email_blacklist')
+    .select('email')
+    .eq('email', email.toLowerCase())
+    .eq('is_active', true)
+    .single();
+  
+  return !!data;
+}
+
 // Gmail sync function with OAuth2
 async function syncGmailEmails() {
   console.log('Syncing Gmail emails...');
@@ -662,6 +676,12 @@ async function syncGmailEmails() {
             
             // Only sync emails from our team members
             if (!teamEmails.includes(fromEmail.toLowerCase())) {
+              continue;
+            }
+            
+            // Check if recipient email is blacklisted
+            if (await isEmailBlacklisted(toEmail)) {
+              console.log(`Skipping blacklisted email: ${toEmail}`);
               continue;
             }
             
