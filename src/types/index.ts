@@ -38,6 +38,7 @@ export interface ChangeRequest {
   newStartTime?: string;
   newEndTime?: string;
   newReason?: string;
+  newDate?: string;
   
   // Begründung
   changeReason: string;

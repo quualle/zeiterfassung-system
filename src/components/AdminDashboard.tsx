@@ -55,7 +55,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     request: ChangeRequest,
     status: 'approved' | 'rejected' | 'modified',
     adminComment?: string,
-    finalValues?: { startTime?: string; endTime?: string; reason?: string }
+    finalValues?: { startTime?: string; endTime?: string; reason?: string; date?: string }
   ) => {
     try {
       await processChangeRequest(request.id, status, user.id, adminComment, finalValues);
@@ -294,6 +294,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                           
                           <div className="new-values">
                             <h5>Gewünschte Änderungen:</h5>
+                            {request.newDate && <p>Datum: {request.newDate}</p>}
                             {request.newStartTime && <p>Start: {formatTime(request.newStartTime)}</p>}
                             {request.newEndTime && <p>Ende: {formatTime(request.newEndTime)}</p>}
                             {request.newReason && <p>Grund: {request.newReason}</p>}
@@ -323,19 +324,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                           <button 
                             onClick={() => {
                               // Hier könnte ein Modal für komplexere Bearbeitung geöffnet werden
+                              const newDate = prompt('Neues Datum (YYYY-MM-DD):', request.newDate || entry?.date || '');
                               const newStart = prompt('Neue Startzeit (HH:MM):', request.newStartTime ? formatTime(request.newStartTime) : '');
                               const newEnd = prompt('Neue Endzeit (HH:MM):', request.newEndTime ? formatTime(request.newEndTime) : '');
                               const comment = prompt('Kommentar:');
                               
-                              if (newStart || newEnd) {
+                              if (newDate || newStart || newEnd) {
                                 const finalValues: any = {};
+                                const targetDate = newDate || request.newDate || entry?.date;
+                                
+                                if (newDate) {
+                                  finalValues.date = newDate;
+                                }
+                                
                                 // Konvertiere lokale Zeit zu ISO String
                                 if (newStart) {
-                                  const localDateTime = new Date(`${entry?.date}T${newStart}:00`);
+                                  const localDateTime = new Date(`${targetDate}T${newStart}:00`);
                                   finalValues.startTime = localDateTime.toISOString();
                                 }
                                 if (newEnd) {
-                                  const localDateTime = new Date(`${entry?.date}T${newEnd}:00`);
+                                  const localDateTime = new Date(`${targetDate}T${newEnd}:00`);
                                   finalValues.endTime = localDateTime.toISOString();
                                 }
                                 

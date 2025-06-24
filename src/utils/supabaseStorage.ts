@@ -346,6 +346,7 @@ export const processChangeRequest = async (
     startTime?: string;
     endTime?: string;
     reason?: string;
+    date?: string;
   }
 ): Promise<void> => {
   const updateData: any = {
@@ -359,6 +360,7 @@ export const processChangeRequest = async (
     updateData.final_start_time = finalValues.startTime;
     updateData.final_end_time = finalValues.endTime;
     updateData.final_reason = finalValues.reason;
+    updateData.final_date = finalValues.date;
   }
   
   const { error } = await supabase
@@ -381,12 +383,18 @@ export const processChangeRequest = async (
       
     if (request) {
       if (request.request_type === 'time_entry') {
+        const updateData: any = {
+          start_time: finalValues?.startTime || request.new_start_time,
+          end_time: finalValues?.endTime || request.new_end_time
+        };
+        
+        if (finalValues?.date || request.new_date) {
+          updateData.date = finalValues?.date || request.new_date;
+        }
+        
         const { error: updateError } = await supabase
           .from('time_entries_zeiterfassung')
-          .update({
-            start_time: finalValues?.startTime || request.new_start_time,
-            end_time: finalValues?.endTime || request.new_end_time
-          })
+          .update(updateData)
           .eq('id', request.time_entry_id);
           
         if (updateError) {

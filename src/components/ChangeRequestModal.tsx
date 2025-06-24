@@ -21,6 +21,7 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
   const [newStartTime, setNewStartTime] = useState('');
   const [newEndTime, setNewEndTime] = useState('');
   const [newReason, setNewReason] = useState('');
+  const [newDate, setNewDate] = useState('');
   const [changeReason, setChangeReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -48,8 +49,9 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
         currentStartTime: requestType === 'time_entry' ? entry.startTime : selectedBreak?.startTime,
         currentEndTime: requestType === 'time_entry' ? entry.endTime : selectedBreak?.endTime,
         currentReason: selectedBreak?.reason,
-        newStartTime: newStartTime ? new Date(`${entry.date}T${newStartTime}:00`).toISOString() : undefined,
-        newEndTime: newEndTime ? new Date(`${entry.date}T${newEndTime}:00`).toISOString() : undefined,
+        newStartTime: newStartTime ? new Date(`${newDate || entry.date}T${newStartTime}:00`).toISOString() : undefined,
+        newEndTime: newEndTime ? new Date(`${newDate || entry.date}T${newEndTime}:00`).toISOString() : undefined,
+        newDate: newDate || undefined,
         newReason: requestType === 'break' ? newReason || undefined : undefined
       };
 
@@ -121,9 +123,21 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
 
           <div className="current-values">
             <h3>Aktuelle Werte:</h3>
+            <p><strong>Datum:</strong> {entry.date}</p>
             <p><strong>Start:</strong> {formatTime(current.start)}</p>
             <p><strong>Ende:</strong> {current.end === 'Läuft noch...' ? current.end : formatTime(current.end)}</p>
             {current.reason && <p><strong>Grund:</strong> {current.reason}</p>}
+          </div>
+
+          <div className="form-group">
+            <label>Neues Datum</label>
+            <input
+              type="date"
+              value={newDate}
+              onChange={(e) => setNewDate(e.target.value)}
+              className="form-input"
+            />
+            <small>Leer lassen für keine Änderung</small>
           </div>
 
           <div className="form-group">
