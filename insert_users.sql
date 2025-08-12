@@ -2,6 +2,6 @@
 INSERT INTO users_zeiterfassung (name, role) 
 VALUES 
   ('Ines Cürten', 'admin'),
-  ('Lisa Bayer', 'employee'),
+  ('Christiane Rohde', 'employee'),
   ('Emilia Rathmann', 'employee')
 ON CONFLICT (name) DO NOTHING;

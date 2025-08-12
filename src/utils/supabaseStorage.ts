@@ -349,40 +349,73 @@ export const processChangeRequest = async (
     date?: string;
   }
 ): Promise<void> => {
-  const updateData: any = {
-    status,
-    processed_at: new Date().toISOString(),
-    processed_by: adminId,
-    admin_comment: adminComment
-  };
-  
-  if (finalValues) {
-    updateData.final_start_time = finalValues.startTime;
-    updateData.final_end_time = finalValues.endTime;
-    updateData.final_reason = finalValues.reason;
-    updateData.final_date = finalValues.date;
-  }
-  
-  const { error } = await supabase
-    .from('change_requests_zeiterfassung')
-    .update(updateData)
-    .eq('id', requestId);
-    
-  if (error) {
-    console.error('Error processing change request:', error);
-    throw error;
-  }
-  
-  // Wenn genehmigt oder modifiziert, die eigentlichen Daten aktualisieren
-  if (status === 'approved' || status === 'modified') {
-    const { data: request } = await supabase
+  try {
+    // Erst den Änderungsantrag holen, um sicherzustellen, dass er existiert
+    const { data: existingRequest, error: fetchError } = await supabase
       .from('change_requests_zeiterfassung')
       .select('*')
       .eq('id', requestId)
       .single();
+    
+    if (fetchError || !existingRequest) {
+      console.error('Change request not found:', fetchError);
+      throw new Error('Änderungsantrag nicht gefunden');
+    }
+    
+    // Prüfe ob der Antrag bereits bearbeitet wurde
+    if (existingRequest.status !== 'pending') {
+      console.warn('Change request already processed:', existingRequest.status);
+      throw new Error('Dieser Änderungsantrag wurde bereits bearbeitet');
+    }
+    
+    const updateData: any = {
+      status,
+      processed_at: new Date().toISOString(),
+      processed_by: adminId,
+      admin_comment: adminComment
+    };
+    
+    if (finalValues) {
+      updateData.final_start_time = finalValues.startTime;
+      updateData.final_end_time = finalValues.endTime;
+      updateData.final_reason = finalValues.reason;
+      updateData.final_date = finalValues.date;
+    }
+    
+    // Update den Änderungsantrag
+    const { error: updateRequestError } = await supabase
+      .from('change_requests_zeiterfassung')
+      .update(updateData)
+      .eq('id', requestId);
       
-    if (request) {
-      if (request.request_type === 'time_entry') {
+    if (updateRequestError) {
+      console.error('Error updating change request:', updateRequestError);
+      throw updateRequestError;
+    }
+    
+    // Wenn genehmigt oder modifiziert, die eigentlichen Daten aktualisieren
+    if (status === 'approved' || status === 'modified') {
+      // Verwende existingRequest statt erneut abzufragen
+      const request = existingRequest;
+      
+      if (request.request_type === 'time_entry' && request.time_entry_id) {
+        // Prüfe ob der Zeiteintrag existiert
+        const { data: timeEntry, error: timeEntryFetchError } = await supabase
+          .from('time_entries_zeiterfassung')
+          .select('*')
+          .eq('id', request.time_entry_id)
+          .single();
+        
+        if (timeEntryFetchError || !timeEntry) {
+          console.error('Time entry not found:', timeEntryFetchError);
+          // Rollback: Setze den Änderungsantrag zurück auf pending
+          await supabase
+            .from('change_requests_zeiterfassung')
+            .update({ status: 'pending', processed_at: null, processed_by: null })
+            .eq('id', requestId);
+          throw new Error('Zeiteintrag nicht gefunden. Änderungsantrag wurde zurückgesetzt.');
+        }
+        
         const updateData: any = {
           start_time: finalValues?.startTime || request.new_start_time,
           end_time: finalValues?.endTime || request.new_end_time
@@ -399,8 +432,31 @@ export const processChangeRequest = async (
           
         if (updateError) {
           console.error('Error updating time entry:', updateError);
+          // Rollback: Setze den Änderungsantrag zurück auf pending
+          await supabase
+            .from('change_requests_zeiterfassung')
+            .update({ status: 'pending', processed_at: null, processed_by: null })
+            .eq('id', requestId);
+          throw new Error('Fehler beim Aktualisieren des Zeiteintrags. Änderungsantrag wurde zurückgesetzt.');
         }
       } else if (request.request_type === 'break' && request.break_id) {
+        // Prüfe ob die Pause existiert
+        const { data: breakEntry, error: breakFetchError } = await supabase
+          .from('breaks_zeiterfassung')
+          .select('*')
+          .eq('id', request.break_id)
+          .single();
+        
+        if (breakFetchError || !breakEntry) {
+          console.error('Break not found:', breakFetchError);
+          // Rollback: Setze den Änderungsantrag zurück auf pending
+          await supabase
+            .from('change_requests_zeiterfassung')
+            .update({ status: 'pending', processed_at: null, processed_by: null })
+            .eq('id', requestId);
+          throw new Error('Pause nicht gefunden. Änderungsantrag wurde zurückgesetzt.');
+        }
+        
         const { error: updateError } = await supabase
           .from('breaks_zeiterfassung')
           .update({
@@ -412,9 +468,18 @@ export const processChangeRequest = async (
           
         if (updateError) {
           console.error('Error updating break:', updateError);
+          // Rollback: Setze den Änderungsantrag zurück auf pending
+          await supabase
+            .from('change_requests_zeiterfassung')
+            .update({ status: 'pending', processed_at: null, processed_by: null })
+            .eq('id', requestId);
+          throw new Error('Fehler beim Aktualisieren der Pause. Änderungsantrag wurde zurückgesetzt.');
         }
       }
     }
+  } catch (error) {
+    console.error('Error in processChangeRequest:', error);
+    throw error;
   }
 };
 
@@ -451,18 +516,41 @@ export const directUpdateBreak = async (
     reason?: string;
   }
 ): Promise<void> => {
-  const updateData: any = {};
-  if (updates.startTime) updateData.start_time = updates.startTime;
-  if (updates.endTime) updateData.end_time = updates.endTime;
-  if (updates.reason) updateData.reason = updates.reason;
-  
-  const { error } = await supabase
-    .from('breaks_zeiterfassung')
-    .update(updateData)
-    .eq('id', breakId);
+  try {
+    // Prüfe ob die Pause existiert
+    const { data: existingBreak, error: fetchError } = await supabase
+      .from('breaks_zeiterfassung')
+      .select('*')
+      .eq('id', breakId)
+      .single();
     
-  if (error) {
-    console.error('Error updating break:', error);
+    if (fetchError || !existingBreak) {
+      console.error('Break not found for direct update:', fetchError);
+      throw new Error('Pause nicht gefunden');
+    }
+    
+    const updateData: any = {};
+    if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
+    if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
+    if (updates.reason !== undefined) updateData.reason = updates.reason;
+    
+    // Nur updaten wenn es Änderungen gibt
+    if (Object.keys(updateData).length === 0) {
+      console.warn('No updates provided for break');
+      return;
+    }
+    
+    const { error } = await supabase
+      .from('breaks_zeiterfassung')
+      .update(updateData)
+      .eq('id', breakId);
+      
+    if (error) {
+      console.error('Error updating break:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error in directUpdateBreak:', error);
     throw error;
   }
 };

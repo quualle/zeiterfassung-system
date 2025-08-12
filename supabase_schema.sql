@@ -36,7 +36,7 @@ CREATE INDEX idx_breaks_zeiterfassung_time_entry_id ON breaks_zeiterfassung(time
 -- Initial-Daten für Benutzer
 INSERT INTO users_zeiterfassung (name, role) VALUES 
   ('Ines Cürten', 'admin'),
-  ('Lisa Bayer', 'employee'),
+  ('Christiane Rohde', 'employee'),
   ('Emilia Rathmann', 'employee');
 
 -- RLS (Row Level Security) aktivieren

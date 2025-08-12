@@ -5,6 +5,7 @@ import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 import { TimeTracking } from './TimeTracking';
 import { WorkTimeRules } from './WorkTimeRules';
 import { EmailBlacklist } from './EmailBlacklist';
+import { WorkTimeStatistics } from './WorkTimeStatistics';
 
 interface AdminDashboardProps {
   user: User;
@@ -18,7 +19,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules' | 'blacklist'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'statistics' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules' | 'blacklist'>('overview');
 
   useEffect(() => {
     const loadData = async () => {
@@ -113,7 +114,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
-            Übersicht
+            Tagesübersicht
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'statistics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('statistics')}
+          >
+            Arbeitszeit-Statistik
           </button>
           <button 
             className={`tab-button ${activeTab === 'requests' ? 'active' : ''}`}
@@ -261,6 +268,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </div>
         </div>
           </>
+        ) : activeTab === 'statistics' ? (
+          /* Arbeitszeit-Statistik Tab */
+          <WorkTimeStatistics currentUser={user} />
         ) : activeTab === 'requests' ? (
           /* Änderungsanträge Tab */
           <div className="change-requests-section">

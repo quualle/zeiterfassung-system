@@ -18,7 +18,7 @@ Ein einfaches webbasiertes Zeiterfassungssystem für kleine Unternehmen (5-10 Mi
 - **Rechte:** Vollzugriff auf alle Zeiterfassungen
 
 ### Mitarbeiter
-- **Name:** Lisa Bayer
+- **Name:** Christiane Rohde
 - **Name:** Emilia Rathmann
 
 Alle Benutzer müssen beim ersten Login einen 4-stelligen PIN vergeben.

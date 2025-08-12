@@ -14,35 +14,80 @@ function App() {
 
   useEffect(() => {
     const init = async () => {
-      // Check for saved session in localStorage
-      const savedSession = localStorage.getItem('adminSession');
+      // Check for saved session in localStorage (for all users, not just admin)
+      const savedSession = localStorage.getItem('userSession');
       if (savedSession) {
         try {
           const session = JSON.parse(savedSession);
-          // Check if session is still valid (24 hours)
+          // Check if session is still valid (24 hours for admin, 12 hours for employees)
           const sessionTime = new Date(session.timestamp).getTime();
           const now = new Date().getTime();
           const hoursSinceLogin = (now - sessionTime) / (1000 * 60 * 60);
+          const maxHours = session.role === 'admin' ? 24 : 12;
           
-          if (hoursSinceLogin < 24) {
+          if (hoursSinceLogin < maxHours) {
             // Restore user from database
-            const { data: user } = await supabase
-              .from('users')
+            const { data: user, error } = await supabase
+              .from('users_zeiterfassung')
               .select('*')
               .eq('id', session.userId)
               .single();
               
-            if (user && user.role === 'admin') {
+            if (!error && user) {
               setCurrentUser(user);
             } else {
+              console.error('Error fetching user:', error);
+              localStorage.removeItem('userSession');
+              // Legacy: Remove old adminSession if exists
               localStorage.removeItem('adminSession');
             }
           } else {
+            localStorage.removeItem('userSession');
+            // Legacy: Remove old adminSession if exists
             localStorage.removeItem('adminSession');
           }
         } catch (error) {
           console.error('Error restoring session:', error);
+          localStorage.removeItem('userSession');
+          // Legacy: Remove old adminSession if exists
           localStorage.removeItem('adminSession');
+        }
+      } else {
+        // Check for legacy adminSession
+        const legacySession = localStorage.getItem('adminSession');
+        if (legacySession) {
+          try {
+            const session = JSON.parse(legacySession);
+            const sessionTime = new Date(session.timestamp).getTime();
+            const now = new Date().getTime();
+            const hoursSinceLogin = (now - sessionTime) / (1000 * 60 * 60);
+            
+            if (hoursSinceLogin < 24) {
+              const { data: user, error } = await supabase
+                .from('users_zeiterfassung')
+                .select('*')
+                .eq('id', session.userId)
+                .single();
+                
+              if (!error && user && user.role === 'admin') {
+                setCurrentUser(user);
+                // Migrate to new session format
+                localStorage.setItem('userSession', JSON.stringify({
+                  userId: user.id,
+                  role: user.role,
+                  timestamp: session.timestamp
+                }));
+                localStorage.removeItem('adminSession');
+              } else {
+                localStorage.removeItem('adminSession');
+              }
+            } else {
+              localStorage.removeItem('adminSession');
+            }
+          } catch (error) {
+            console.error('Error migrating legacy session:', error);
+            localStorage.removeItem('adminSession');
+          }
         }
       }
       
@@ -74,7 +119,7 @@ function App() {
             
             // Erstelle Benachrichtigung für Admin
             const admins = await supabase
-              .from('users')
+              .from('users_zeiterfassung')
               .select('id')
               .eq('role', 'admin');
             
@@ -109,17 +154,21 @@ function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     
-    // Save admin session to localStorage
-    if (user.role === 'admin') {
-      localStorage.setItem('adminSession', JSON.stringify({
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      }));
-    }
+    // Save session to localStorage for all users
+    localStorage.setItem('userSession', JSON.stringify({
+      userId: user.id,
+      role: user.role,
+      timestamp: new Date().toISOString()
+    }));
+    
+    // Legacy: Remove old adminSession if exists
+    localStorage.removeItem('adminSession');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('userSession');
+    // Legacy: Remove old adminSession if exists
     localStorage.removeItem('adminSession');
   };
 

@@ -15,7 +15,7 @@ export const initializeUsers = () => {
       },
       {
         id: '2',
-        name: 'Lisa Bayer',
+        name: 'Christiane Rohde',
         role: 'employee',
         firstLogin: true
       },
