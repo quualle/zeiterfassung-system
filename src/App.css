@@ -892,6 +892,46 @@ tr:hover {
   border-color: #ddd !important;
 }
 
+/* New Feature Badge */
+.new-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ff6b6b, #ff4757);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: pulse 2s infinite;
+  box-shadow: 0 2px 4px rgba(255, 71, 87, 0.3);
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 2px 4px rgba(255, 71, 87, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 3px 8px rgba(255, 71, 87, 0.5);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 4px rgba(255, 71, 87, 0.3);
+  }
+}
+
+.tab-button.active .new-badge {
+  background: linear-gradient(135deg, #fff, #ffeaa7);
+  color: #ff4757;
+  animation: none;
+}
+
 /* Work Time Statistics Styles */
 .work-time-statistics {
   padding: 20px;

@@ -120,7 +120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             className={`tab-button ${activeTab === 'statistics' ? 'active' : ''}`}
             onClick={() => setActiveTab('statistics')}
           >
-            Arbeitszeit-Statistik
+            Arbeitszeit-Statistik <span className="new-badge">NEU</span>
           </button>
           <button 
             className={`tab-button ${activeTab === 'requests' ? 'active' : ''}`}
