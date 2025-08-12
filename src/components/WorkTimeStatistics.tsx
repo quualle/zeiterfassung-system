@@ -176,6 +176,7 @@ export const WorkTimeStatistics: React.FC<Props> = ({ currentUser }) => {
 
   useEffect(() => {
     loadWorkTimeData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, customStartDate, customEndDate]);
 
   // Formatiere Datum für Anzeige
