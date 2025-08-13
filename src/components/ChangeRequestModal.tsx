@@ -40,6 +40,10 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
     try {
       const selectedBreak = requestType === 'break' ? entry.breaks[selectedBreakIndex] : null;
       
+      // Verwende das Datum des originalen Zeiteintrags, nicht entry.date
+      const originalDate = entry.startTime ? entry.startTime.split('T')[0] : entry.date;
+      const dateToUse = newDate || originalDate;
+      
       const request: Omit<ChangeRequest, 'id' | 'createdAt' | 'status'> = {
         userId,
         timeEntryId: entry.id,
@@ -49,11 +53,20 @@ export const ChangeRequestModal: React.FC<ChangeRequestModalProps> = ({
         currentStartTime: requestType === 'time_entry' ? entry.startTime : selectedBreak?.startTime,
         currentEndTime: requestType === 'time_entry' ? entry.endTime : selectedBreak?.endTime,
         currentReason: selectedBreak?.reason,
-        newStartTime: newStartTime ? new Date(`${newDate || entry.date}T${newStartTime}:00`).toISOString() : undefined,
-        newEndTime: newEndTime ? new Date(`${newDate || entry.date}T${newEndTime}:00`).toISOString() : undefined,
+        newStartTime: newStartTime ? new Date(`${dateToUse}T${newStartTime}:00`).toISOString() : undefined,
+        newEndTime: newEndTime ? new Date(`${dateToUse}T${newEndTime}:00`).toISOString() : undefined,
         newDate: newDate || undefined,
         newReason: requestType === 'break' ? newReason || undefined : undefined
       };
+      
+      console.log('Change request being created:', {
+        originalDate,
+        newDate,
+        dateToUse,
+        newStartTime,
+        newEndTime,
+        request
+      });
 
       await createChangeRequest(request);
       onSuccess();

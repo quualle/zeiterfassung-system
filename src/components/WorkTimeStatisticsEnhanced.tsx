@@ -126,11 +126,11 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
     try {
       const dateRange = getDateRange();
       
-      // Hole alle Benutzer mit Soll-Arbeitszeit
+      // Hole alle Benutzer mit Soll-Arbeitszeit (inkl. Admins, außer sie sind der aktuelle User)
+      // Admins sehen alle inkl. sich selbst, andere sehen nur nicht-Admins
       const { data: users, error: usersError } = await supabase
         .from('users_zeiterfassung')
         .select('*, weekly_hours')
-        .neq('role', 'admin')
         .order('name');
 
       if (usersError) {
@@ -138,7 +138,10 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
         return;
       }
       
-      console.log('Loaded users for statistics:', users?.map(u => ({ name: u.name, role: u.role, weekly_hours: u.weekly_hours })))
+      console.log('Loaded users for statistics:', users?.map(u => ({ name: u.name, role: u.role, weekly_hours: u.weekly_hours })));
+      
+      // Filtere Benutzer, die angezeigt werden sollen (alle mit definierten Wochenstunden)
+      const usersToShow = users?.filter(u => u.weekly_hours !== null && u.weekly_hours !== undefined) || [];
 
       // Hole Zeiteinträge
       const { data: timeEntries, error: entriesError } = await supabase
@@ -178,8 +181,8 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
         .gte('start_date', dateRange.start)
         .lte('end_date', dateRange.end);
 
-      // Verarbeite Daten pro Benutzer
-      const processedData: WorkTimeData[] = users.map(user => {
+      // Verarbeite Daten pro Benutzer (nur die mit Wochenstunden)
+      const processedData: WorkTimeData[] = usersToShow.map(user => {
         const userEntries = timeEntries?.filter(entry => entry.user_id === user.id) || [];
         const userSickLeaves = sickLeaves?.filter(sl => sl.user_id === user.id) || [];
         const userVacations = vacations?.filter(v => v.user_id === user.id) || [];
