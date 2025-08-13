@@ -47,7 +47,7 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState<string | null>(null);
   const [view, setView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
-  const [editingCell, setEditingCell] = useState<{ userId: string; date: string; field: 'start' | 'end' } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ userId: string; date: string; field: 'start' | 'end' | 'date' } | null>(null);
   const [savingChanges, setSavingChanges] = useState(false);
 
   // Berechne Datumsbereiche
@@ -394,6 +394,94 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
   };
 
   // Exportiere als CSV
+  const handleDateUpdate = async (userId: string, oldDate: string, entryId: string, newDate: string) => {
+    setSavingChanges(true);
+    
+    try {
+      // Hole den aktuellen Eintrag
+      const { data: currentEntry, error: fetchError } = await supabase
+        .from('time_entries_zeiterfassung')
+        .select('*')
+        .eq('id', entryId)
+        .single();
+
+      if (fetchError || !currentEntry) {
+        console.error('Error fetching entry:', fetchError);
+        alert('Fehler beim Laden des Eintrags');
+        return;
+      }
+
+      // Parse die alten Zeiten
+      const oldStartTime = new Date(currentEntry.start_time);
+      const oldEndTime = currentEntry.end_time ? new Date(currentEntry.end_time) : null;
+      
+      // Erstelle neue Zeiten mit dem neuen Datum
+      const newStartTime = new Date(newDate);
+      newStartTime.setHours(oldStartTime.getHours(), oldStartTime.getMinutes(), oldStartTime.getSeconds());
+      
+      const updateData: any = {
+        date: newDate,
+        start_time: newStartTime.toISOString()
+      };
+      
+      if (oldEndTime) {
+        const newEndTime = new Date(newDate);
+        newEndTime.setHours(oldEndTime.getHours(), oldEndTime.getMinutes(), oldEndTime.getSeconds());
+        updateData.end_time = newEndTime.toISOString();
+      }
+
+      // Update in Supabase
+      const { error: updateError } = await supabase
+        .from('time_entries_zeiterfassung')
+        .update(updateData)
+        .eq('id', entryId);
+
+      if (updateError) {
+        console.error('Error updating date:', updateError);
+        alert(`Fehler beim Speichern: ${updateError.message}`);
+      } else {
+        // Aktualisiere auch alle Pausen-Zeiten für diesen Eintrag
+        const { data: breaks, error: breaksError } = await supabase
+          .from('breaks_zeiterfassung')
+          .select('*')
+          .eq('time_entry_id', entryId);
+
+        if (!breaksError && breaks && breaks.length > 0) {
+          for (const breakEntry of breaks) {
+            const oldBreakStart = new Date(breakEntry.start_time);
+            const oldBreakEnd = breakEntry.end_time ? new Date(breakEntry.end_time) : null;
+            
+            const newBreakStart = new Date(newDate);
+            newBreakStart.setHours(oldBreakStart.getHours(), oldBreakStart.getMinutes(), oldBreakStart.getSeconds());
+            
+            const breakUpdateData: any = {
+              start_time: newBreakStart.toISOString()
+            };
+            
+            if (oldBreakEnd) {
+              const newBreakEnd = new Date(newDate);
+              newBreakEnd.setHours(oldBreakEnd.getHours(), oldBreakEnd.getMinutes(), oldBreakEnd.getSeconds());
+              breakUpdateData.end_time = newBreakEnd.toISOString();
+            }
+
+            await supabase
+              .from('breaks_zeiterfassung')
+              .update(breakUpdateData)
+              .eq('id', breakEntry.id);
+          }
+        }
+        // Erfolg - Daten neu laden
+        await loadWorkTimeData();
+        setEditingCell(null);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      alert('Unerwarteter Fehler beim Speichern');
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
   const handleTimeUpdate = async (userId: string, date: string, entryId: string, field: 'start' | 'end', newTime: string) => {
     setSavingChanges(true);
     
@@ -595,7 +683,7 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
                           <div className="detail-table">
                             <h4>Tagesübersicht</h4>
                             {currentUser.role === 'admin' && (
-                              <p className="edit-hint">💡 Klicken Sie auf Start- oder Endzeiten um diese direkt zu bearbeiten</p>
+                              <p className="edit-hint">💡 Klicken Sie auf Datum, Start- oder Endzeiten um diese direkt zu bearbeiten</p>
                             )}
                             <table>
                               <thead>
@@ -620,7 +708,19 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
                                   
                                   return (
                                     <tr key={index} className={`day-type-${day.type}`}>
-                                      <td>{formatDate(day.date)}</td>
+                                      <td>
+                                        <EditableTimeCell
+                                          value={day.date}
+                                          isEditing={editingCell?.userId === userData.userId && 
+                                                    editingCell?.date === day.date && 
+                                                    editingCell?.field === 'date'}
+                                          onEdit={() => canEdit && setEditingCell({ userId: userData.userId, date: day.date, field: 'date' })}
+                                          onSave={(newDate) => handleDateUpdate(userData.userId, day.date, day.entryId!, newDate)}
+                                          onCancel={() => setEditingCell(null)}
+                                          type="date"
+                                          disabled={!canEdit || savingChanges}
+                                        />
+                                      </td>
                                       <td>
                                         <EditableTimeCell
                                           value={day.startTime}

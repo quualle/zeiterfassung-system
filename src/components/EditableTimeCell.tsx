@@ -6,7 +6,7 @@ interface EditableTimeCellProps {
   onEdit: () => void;
   onSave: (value: string) => void;
   onCancel: () => void;
-  type?: 'time' | 'text';
+  type?: 'time' | 'text' | 'date';
   disabled?: boolean;
 }
 
@@ -63,7 +63,7 @@ export const EditableTimeCell: React.FC<EditableTimeCellProps> = ({
       <div className="editable-cell editing">
         <input
           ref={inputRef}
-          type={type === 'time' ? 'time' : 'text'}
+          type={type === 'time' ? 'time' : type === 'date' ? 'date' : 'text'}
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={handleKeyDown}
