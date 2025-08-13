@@ -354,7 +354,7 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
       setWorkTimeData(processedData);
       
       // Warne, wenn erwartete Benutzer fehlen
-      const expectedUsers = ['Christiane Rohde', 'Emilia Rathmann', 'Ines Kürten'];
+      const expectedUsers = ['Christiane Rohde', 'Emilia Rathmann', 'Ines Cürten']; // Mit C!
       const loadedUserNames = processedData.map(u => u.userName);
       const missingUsers = expectedUsers.filter(name => !loadedUserNames.includes(name));
       
