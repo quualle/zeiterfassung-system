@@ -1564,6 +1564,91 @@ tr:hover {
   color: #6c757d;
 }
 
+/* File Upload Styles for Sick Leave */
+.selected-files {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.selected-files p {
+  margin: 0 0 8px 0;
+  font-weight: 500;
+  color: #495057;
+}
+
+.selected-files ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.selected-files li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 3px;
+  margin-bottom: 5px;
+}
+
+.btn-remove-file {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+}
+
+.btn-remove-file:hover {
+  background: #c82333;
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-list .btn-link {
+  background: none;
+  border: none;
+  color: #007bff;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.file-list .btn-link:hover {
+  color: #0056b3;
+}
+
+.inline-file-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.inline-file-upload input[type="file"] {
+  font-size: 12px;
+}
+
+.inline-file-upload button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
 /* Animations */
 @keyframes modalFadeIn {
   from {
