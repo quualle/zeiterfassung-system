@@ -137,6 +137,8 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
         console.error('Error fetching users:', usersError);
         return;
       }
+      
+      console.log('Loaded users for statistics:', users?.map(u => ({ name: u.name, role: u.role, weekly_hours: u.weekly_hours })))
 
       // Hole Zeiteinträge
       const { data: timeEntries, error: entriesError } = await supabase
@@ -350,6 +352,16 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
       });
 
       setWorkTimeData(processedData);
+      
+      // Warne, wenn erwartete Benutzer fehlen
+      const expectedUsers = ['Christiane Rohde', 'Emilia Rathmann', 'Ines Kürten'];
+      const loadedUserNames = processedData.map(u => u.userName);
+      const missingUsers = expectedUsers.filter(name => !loadedUserNames.includes(name));
+      
+      if (missingUsers.length > 0) {
+        console.warn('Folgende Benutzer fehlen in der Statistik:', missingUsers);
+        console.log('Geladene Benutzer:', loadedUserNames);
+      }
     } catch (error) {
       console.error('Error loading work time data:', error);
     } finally {
