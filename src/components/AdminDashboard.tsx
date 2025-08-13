@@ -5,7 +5,7 @@ import { formatDate, formatTime, calculateTotalWorkTime } from '../utils/time';
 import { TimeTracking } from './TimeTracking';
 import { WorkTimeRules } from './WorkTimeRules';
 import { EmailBlacklist } from './EmailBlacklist';
-import { WorkTimeStatistics } from './WorkTimeStatistics';
+import { WorkTimeStatisticsEnhanced } from './WorkTimeStatisticsEnhanced';
 
 interface AdminDashboardProps {
   user: User;
@@ -270,7 +270,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </>
         ) : activeTab === 'statistics' ? (
           /* Arbeitszeit-Statistik Tab */
-          <WorkTimeStatistics currentUser={user} />
+          <WorkTimeStatisticsEnhanced currentUser={user} />
         ) : activeTab === 'requests' ? (
           /* Änderungsanträge Tab */
           <div className="change-requests-section">
