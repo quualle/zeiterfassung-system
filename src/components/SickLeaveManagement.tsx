@@ -147,7 +147,21 @@ export const SickLeaveManagement: React.FC<Props> = ({ currentUser }) => {
 
       if (insertError) {
         console.error('Error creating sick leave:', insertError);
-        alert('Fehler beim Speichern der Krankmeldung');
+        
+        // Spezifische Fehlerbehandlung
+        if (insertError.code === '42501') {
+          alert('Fehler: Keine Berechtigung zum Erstellen von Krankmeldungen.');
+        } else if (insertError.code === '23503') {
+          alert('Fehler: Der ausgewählte Benutzer existiert nicht in der Datenbank.');
+        } else {
+          alert(`Fehler beim Speichern der Krankmeldung: ${insertError.message}\n\nFehlercode: ${insertError.code}`);
+        }
+        return;
+      }
+      
+      if (!sickLeaveData) {
+        console.error('No data returned from insert');
+        alert('Fehler: Krankmeldung wurde nicht gespeichert (keine Daten zurückgegeben).');
         return;
       }
 

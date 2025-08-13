@@ -49,7 +49,11 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
       .select('*')
       .order('name');
 
-    if (!error && data) {
+    if (error) {
+      console.error('Error loading users:', error);
+      alert(`Fehler beim Laden der Benutzer: ${error.message}`);
+    } else if (data) {
+      console.log('Loaded users:', data);
       setUsers(data);
     }
   };
@@ -73,7 +77,11 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
 
       const { data, error } = await query;
 
-      if (!error && data) {
+      if (error) {
+        console.error('Error loading vacations:', error);
+        alert(`Fehler beim Laden der Urlaube: ${error.message}`);
+      } else if (data) {
+        console.log(`Loaded ${data.length} vacations`);
         const enrichedData = data.map(vacation => ({
           ...vacation,
           userId: vacation.user_id,
@@ -90,6 +98,7 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
       }
     } catch (error) {
       console.error('Error loading vacations:', error);
+      alert('Unerwarteter Fehler beim Laden der Urlaube');
     } finally {
       setLoading(false);
     }
@@ -115,6 +124,13 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
     
     const userId = isEmployee ? currentUser.id : formData.userId;
     
+    console.log('Submitting vacation request:', {
+      userId,
+      formData,
+      isEmployee,
+      currentUser
+    });
+    
     if (!userId || !formData.startDate || !formData.endDate) {
       alert('Bitte alle Pflichtfelder ausfüllen');
       return;
@@ -132,7 +148,7 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
         user_id: userId,
         start_date: formData.startDate,
         end_date: formData.endDate,
-        reason: formData.reason,
+        reason: formData.reason || '',
         days_count: daysCount,
         status: isEmployee ? 'pending' : 'approved'
       };
@@ -143,15 +159,33 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
         insertData.approved_by = currentUser.id;
         insertData.approved_at = new Date().toISOString();
       }
+      
+      console.log('Insert data to be sent:', insertData);
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('vacations')
-        .insert(insertData);
+        .insert(insertData)
+        .select()
+        .single();
 
       if (error) {
         console.error('Error creating vacation:', error);
-        alert('Fehler beim Speichern des Urlaubs');
+        
+        // Spezifische Fehlerbehandlung
+        if (error.code === '42501') {
+          alert('Fehler: Keine Berechtigung zum Erstellen von Urlaubseinträgen. Bitte kontaktieren Sie den Administrator.');
+        } else if (error.code === '23505') {
+          alert('Fehler: Ein Urlaub für diesen Zeitraum existiert bereits.');
+        } else if (error.code === '23503') {
+          alert('Fehler: Der ausgewählte Benutzer existiert nicht in der Datenbank.');
+        } else {
+          alert(`Fehler beim Speichern des Urlaubs: ${error.message}\n\nFehlercode: ${error.code}`);
+        }
+      } else if (!data) {
+        console.error('No data returned from insert');
+        alert('Fehler: Urlaub wurde nicht gespeichert (keine Daten zurückgegeben). Möglicherweise gibt es ein Problem mit den RLS-Policies.');
       } else {
+        console.log('Vacation created successfully:', data);
         alert(isEmployee ? 'Urlaubsantrag erfolgreich eingereicht' : 'Urlaub erfolgreich eingetragen');
         setShowForm(false);
         setFormData({
@@ -160,10 +194,11 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
           endDate: '',
           reason: ''
         });
-        loadVacations();
+        await loadVacations(); // Warte auf das Laden
       }
-    } catch (error) {
-      console.error('Error:', error);
+    } catch (error: any) {
+      console.error('Unexpected error:', error);
+      alert(`Unerwarteter Fehler: ${error.message || error}`);
     }
   };
 
