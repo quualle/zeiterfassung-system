@@ -35,6 +35,7 @@ export const WeekendDutyManagement: React.FC<Props> = ({ currentUser, isEmployee
     if (!isEmployee) {
       loadUsers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEmployee, currentUser.id]);
 
   const loadUsers = async () => {

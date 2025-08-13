@@ -2,9 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
 
-interface ExtendedUser extends User {
-  weeklyHours?: number;
-}
 
 interface WorkTimeData {
   userId: string;
@@ -158,14 +155,14 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
       }
 
       // Hole Krankmeldungen
-      const { data: sickLeaves, error: sickError } = await supabase
+      const { data: sickLeaves } = await supabase
         .from('sick_leaves')
         .select('*')
         .lte('start_date', dateRange.end)
         .gte('end_date', dateRange.start);
 
       // Hole Urlaube
-      const { data: vacations, error: vacationError } = await supabase
+      const { data: vacations } = await supabase
         .from('vacations')
         .select('*')
         .eq('status', 'approved')
@@ -173,7 +170,7 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
         .gte('end_date', dateRange.start);
 
       // Hole Wochenendbereitschaften
-      const { data: weekendDuties, error: weekendError } = await supabase
+      const { data: weekendDuties } = await supabase
         .from('weekend_duties')
         .select('*')
         .gte('start_date', dateRange.start)

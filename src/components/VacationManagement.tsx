@@ -40,6 +40,7 @@ export const VacationManagement: React.FC<Props> = ({ currentUser, isEmployee = 
     if (!isEmployee) {
       loadUsers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEmployee]);
 
   const loadUsers = async () => {
