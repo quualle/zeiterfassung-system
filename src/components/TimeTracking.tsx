@@ -3,6 +3,8 @@ import { User, TimeEntry, Notification, WorkTimeRule } from '../types';
 import { getTodayEntry, saveTimeEntry, getUserTimeEntries, saveNotification, getUsers } from '../utils/storageProvider';
 import { formatTime, calculateDuration, calculateTotalWorkTime, formatDate } from '../utils/time';
 import { ChangeRequestModal } from './ChangeRequestModal';
+import { VacationManagement } from './VacationManagement';
+import { WeekendDutyManagement } from './WeekendDutyManagement';
 import { supabase } from '../lib/supabase';
 
 interface TimeTrackingProps {
@@ -21,6 +23,7 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
   const [showChangeRequest, setShowChangeRequest] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null);
   const [workTimeRule, setWorkTimeRule] = useState<WorkTimeRule | null>(null);
+  const [activeView, setActiveView] = useState<'timetracking' | 'vacations' | 'weekendduties'>('timetracking');
 
   // Lade Arbeitszeit-Regeln aus der Datenbank
   useEffect(() => {
@@ -257,10 +260,34 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
       </header>
 
       <main className="main-content">
-        <div className="current-time">
-          <h2>{currentTime.toLocaleTimeString('de-DE')}</h2>
-          <p>{currentTime.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        {/* Navigation für Mitarbeiter */}
+        <div className="employee-navigation">
+          <button 
+            className={`nav-button ${activeView === 'timetracking' ? 'active' : ''}`}
+            onClick={() => setActiveView('timetracking')}
+          >
+            Zeiterfassung
+          </button>
+          <button 
+            className={`nav-button ${activeView === 'vacations' ? 'active' : ''}`}
+            onClick={() => setActiveView('vacations')}
+          >
+            Urlaubsanträge
+          </button>
+          <button 
+            className={`nav-button ${activeView === 'weekendduties' ? 'active' : ''}`}
+            onClick={() => setActiveView('weekendduties')}
+          >
+            Wochenendbereitschaft
+          </button>
         </div>
+
+        {activeView === 'timetracking' ? (
+          <>
+            <div className="current-time">
+              <h2>{currentTime.toLocaleTimeString('de-DE')}</h2>
+              <p>{currentTime.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
 
         {!isWorking ? (
           <div className="start-work">
@@ -372,6 +399,12 @@ export const TimeTracking: React.FC<TimeTrackingProps> = ({ user, onLogout }) =>
             <p>Keine vergangenen Arbeitszeiten in den letzten 7 Tagen.</p>
           )}
         </div>
+          </>
+        ) : activeView === 'vacations' ? (
+          <VacationManagement currentUser={user} isEmployee={true} />
+        ) : activeView === 'weekendduties' ? (
+          <WeekendDutyManagement currentUser={user} isEmployee={true} />
+        ) : null}
       </main>
 
       {/* Modal für Änderungsanträge */}

@@ -6,6 +6,9 @@ import { TimeTracking } from './TimeTracking';
 import { WorkTimeRules } from './WorkTimeRules';
 import { EmailBlacklist } from './EmailBlacklist';
 import { WorkTimeStatisticsEnhanced } from './WorkTimeStatisticsEnhanced';
+import { SickLeaveManagement } from './SickLeaveManagement';
+import { VacationManagement } from './VacationManagement';
+import { WeekendDutyManagement } from './WeekendDutyManagement';
 
 interface AdminDashboardProps {
   user: User;
@@ -19,7 +22,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'statistics' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules' | 'blacklist'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'statistics' | 'requests' | 'timetracking' | 'notifications' | 'worktimerules' | 'blacklist' | 'sickleaves' | 'vacations' | 'weekendduties'>('overview');
 
   useEffect(() => {
     const loadData = async () => {
@@ -139,6 +142,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             onClick={() => setActiveTab('notifications')}
           >
             Benachrichtigungen ({notifications.filter(n => !n.read).length})
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'sickleaves' ? 'active' : ''}`}
+            onClick={() => setActiveTab('sickleaves')}
+          >
+            Krankmeldungen
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'vacations' ? 'active' : ''}`}
+            onClick={() => setActiveTab('vacations')}
+          >
+            Urlaube
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'weekendduties' ? 'active' : ''}`}
+            onClick={() => setActiveTab('weekendduties')}
+          >
+            Bereitschaften
           </button>
           <button 
             className={`tab-button ${activeTab === 'worktimerules' ? 'active' : ''}`}
@@ -450,6 +471,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
               </div>
             )}
           </div>
+        ) : activeTab === 'sickleaves' ? (
+          /* Krankmeldungen */
+          <SickLeaveManagement currentUser={user} />
+        ) : activeTab === 'vacations' ? (
+          /* Urlaubsverwaltung */
+          <VacationManagement currentUser={user} />
+        ) : activeTab === 'weekendduties' ? (
+          /* Wochenendbereitschaften */
+          <WeekendDutyManagement currentUser={user} />
         ) : activeTab === 'worktimerules' ? (
           /* Arbeitszeitregeln */
           <WorkTimeRules users={users} />

@@ -1304,6 +1304,40 @@ tr:hover {
   font-size: 14px;
 }
 
+/* Employee Navigation */
+.employee-navigation {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.employee-navigation .nav-button {
+  padding: 10px 20px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #495057;
+  transition: all 0.3s ease;
+}
+
+.employee-navigation .nav-button:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.employee-navigation .nav-button.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
 /* Animations */
 @keyframes modalFadeIn {
   from {
