@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
+import { EditableTimeCell } from './EditableTimeCell';
 
 
 interface WorkTimeData {
@@ -22,6 +23,7 @@ interface WorkTimeData {
     startTime: string;
     endTime: string;
     type: 'work' | 'sick' | 'vacation' | 'weekend_duty';
+    entryId?: string;
   }[];
   weekSummaries?: {
     weekNumber: number;
@@ -45,6 +47,8 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState<string | null>(null);
   const [view, setView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [editingCell, setEditingCell] = useState<{ userId: string; date: string; field: 'start' | 'end' } | null>(null);
+  const [savingChanges, setSavingChanges] = useState(false);
 
   // Berechne Datumsbereiche
   const getDateRange = () => {
@@ -219,7 +223,8 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
             minutes,
             startTime: start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
             endTime: end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-            type: 'work' as const
+            type: 'work' as const,
+            entryId: entry.id
           };
         }).filter(day => day !== null) as any[];
 
@@ -389,6 +394,55 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
   };
 
   // Exportiere als CSV
+  const handleTimeUpdate = async (userId: string, date: string, entryId: string, field: 'start' | 'end', newTime: string) => {
+    setSavingChanges(true);
+    
+    try {
+      // Hole den aktuellen Eintrag
+      const { data: currentEntry, error: fetchError } = await supabase
+        .from('time_entries_zeiterfassung')
+        .select('*')
+        .eq('id', entryId)
+        .single();
+
+      if (fetchError || !currentEntry) {
+        console.error('Error fetching entry:', fetchError);
+        alert('Fehler beim Laden des Eintrags');
+        return;
+      }
+
+      // Erstelle neuen ISO-Timestamp mit dem neuen Zeitwert
+      const newDateTime = new Date(`${date}T${newTime}:00`);
+      
+      const updateData: any = {};
+      if (field === 'start') {
+        updateData.start_time = newDateTime.toISOString();
+      } else {
+        updateData.end_time = newDateTime.toISOString();
+      }
+
+      // Update in Supabase
+      const { error: updateError } = await supabase
+        .from('time_entries_zeiterfassung')
+        .update(updateData)
+        .eq('id', entryId);
+
+      if (updateError) {
+        console.error('Error updating time:', updateError);
+        alert(`Fehler beim Speichern: ${updateError.message}`);
+      } else {
+        // Erfolg - Daten neu laden
+        await loadWorkTimeData();
+        setEditingCell(null);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      alert('Unerwarteter Fehler beim Speichern');
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
   const exportToCSV = () => {
     const dateRange = getDateRange();
     let csv = 'Mitarbeiter,Datum,Start,Ende,Stunden,Minuten,Typ,Soll-Stunden,Überstunden\n';
@@ -540,6 +594,9 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
                         {view === 'daily' ? (
                           <div className="detail-table">
                             <h4>Tagesübersicht</h4>
+                            {currentUser.role === 'admin' && (
+                              <p className="edit-hint">💡 Klicken Sie auf Start- oder Endzeiten um diese direkt zu bearbeiten</p>
+                            )}
                             <table>
                               <thead>
                                 <tr>
@@ -558,11 +615,36 @@ export const WorkTimeStatisticsEnhanced: React.FC<Props> = ({ currentUser }) => 
                                     ? (day.hours + day.minutes / 60) - dailyTarget 
                                     : 0;
                                   
+                                  const isAdmin = currentUser.role === 'admin';
+                                  const canEdit = isAdmin && day.type === 'work' && day.entryId;
+                                  
                                   return (
                                     <tr key={index} className={`day-type-${day.type}`}>
                                       <td>{formatDate(day.date)}</td>
-                                      <td>{day.startTime}</td>
-                                      <td>{day.endTime}</td>
+                                      <td>
+                                        <EditableTimeCell
+                                          value={day.startTime}
+                                          isEditing={editingCell?.userId === userData.userId && 
+                                                    editingCell?.date === day.date && 
+                                                    editingCell?.field === 'start'}
+                                          onEdit={() => canEdit && setEditingCell({ userId: userData.userId, date: day.date, field: 'start' })}
+                                          onSave={(newTime) => handleTimeUpdate(userData.userId, day.date, day.entryId!, 'start', newTime)}
+                                          onCancel={() => setEditingCell(null)}
+                                          disabled={!canEdit || savingChanges}
+                                        />
+                                      </td>
+                                      <td>
+                                        <EditableTimeCell
+                                          value={day.endTime}
+                                          isEditing={editingCell?.userId === userData.userId && 
+                                                    editingCell?.date === day.date && 
+                                                    editingCell?.field === 'end'}
+                                          onEdit={() => canEdit && setEditingCell({ userId: userData.userId, date: day.date, field: 'end' })}
+                                          onSave={(newTime) => handleTimeUpdate(userData.userId, day.date, day.entryId!, 'end', newTime)}
+                                          onCancel={() => setEditingCell(null)}
+                                          disabled={!canEdit || savingChanges}
+                                        />
+                                      </td>
                                       <td>{day.hours}h {day.minutes}min</td>
                                       <td>
                                         <span className={`type-badge type-${day.type}`}>
