@@ -46,7 +46,6 @@ export const SickLeaveManagement: React.FC<Props> = ({ currentUser }) => {
     const { data, error } = await supabase
       .from('users_zeiterfassung')
       .select('*')
-      .neq('role', 'admin')
       .order('name');
 
     if (!error && data) {
