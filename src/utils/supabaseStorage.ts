@@ -462,7 +462,7 @@ export const processChangeRequest = async (
           .update({
             start_time: finalValues?.startTime || request.new_start_time,
             end_time: finalValues?.endTime || request.new_end_time,
-            reason: finalValues?.reason || request.new_reason
+            reason: finalValues?.reason || request.new_reason || breakEntry.reason
           })
           .eq('id', request.break_id);
           
